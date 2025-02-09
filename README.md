@@ -49,16 +49,16 @@ The main features are :
 ## Supported authentications
 
 |       LDAP    (get/add/remove/modify/query)            |    Flags                 |   Comments                                       | 
-|---                                                     |---                       |---                                               | 
-|       simple (cleartext password)                      |   `-p` `--simple-auth`   |                                                  |
+|---                                                     |---                       |---                                               |
 |       NTLM (cleartext password)                        |   `-p`                   | Fall back to simple authentication when failing  |
-|       NTLM (hash)                                      |   `-H`                   | Fall back to simple authentication when failing  |   
+|       NTLM (hash)                                      |   `-H`                   |                                                  |   
 |       Kerberos (cleartext password)                    |   `-p` `-k`              |                                                  |       
 |       Kerberos (hash)                                  |   `-H` `-k`              |                                                  |    
 |       Kerberos (aeskey)                                |   `--aes-key`            |                                                  |      
 |       Kerberos (ccache)                                |   `-k`                   | Try to to load ccache from KRB5CCNAME env        |      
 |       Schannel (certificate)                           |   `-pfx`                 |                                                  |      
 |       Schannel (certificate)                           |   `-cert` `-key`         |                                                  |      
+
 
 |       Kerberos    (getTGT, getST, getNThash)           |    Flags                 |                                                  |       
 |---                                                     |---                       |---                                               |
@@ -368,7 +368,7 @@ add RBCD             add dcsync           add groupMember      add write_gpo_dac
 add computer         add genericAll       add user  
 ```
 
-One of the most significant advantage of using the interactive shell is that you juste need to focus on the actions you want to perform.
+One of the most significant advantage of using the interactive shell is that you just need to focus on the actions you want to perform.
 You are connected as lowpriv user ? Just type getTGT and you get a TGT for that user.
 
 ```
