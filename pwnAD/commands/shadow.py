@@ -146,7 +146,7 @@ def add(conn, target):
     key, cert = get_key_and_certificate(cert)
     pfx = create_pfx(key, cert)
 
-    out = f"{target.rstrip("$")}.pfx"
+    out = f"{target.rstrip('$')}.pfx"
     with open(out, "wb") as f:
         f.write(pfx)
 

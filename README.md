@@ -7,20 +7,14 @@ pwnAD is a tool that focuses on Active Directory exploitation, mainly using LDAP
 The tool still contains bugs and some features are not fully operational (for now, better specify a username even when authenticating with certificates). <br>
 So, don't hesitate to open an issue or make a pull request, I will gladly take it into account as soon as I can.
 
-The main features are :
-- Authentication with password, hash, TGT (ccache), certificates
-- LDAP enumeration and exploitation
-- LDAP connection is possible with LDAP signing and channel binding (with password and hash) thanks to [ldap3-bleeding-edge](https://pypi.org/project/ldap3-bleeding-edge) package. We will come back to ldap3 main branch when the required PR are merged.
-- LDAP connection with certificates via Schannel.
-- Kerberos actions (getTGT, getST, getNThash) possible with certificates, thanks to PKINIT
-- [Interactive shell !](#interactive-mode) (because it's cool)
-
 
 
 # Table of content
 
 - [pwnAD](#pwnAD)
     - [Table of content](#table-of-content)
+    - [Features](#features)
+      - [Supported authentication](#supported-authentication)
     - [Installation](#installation)
     - [Usage](#usage)
     - [LDAP actions](#ldap-actions)
@@ -42,13 +36,44 @@ The main features are :
       - [switch_user](#switch_user)
     - [Credits](#credits)
 
+# Features
+
+The main features are :
+- Many supported authentications (see after)
+- LDAP enumeration and exploitation
+- LDAP connection supports LDAP signing and channel binding (simple and NTLM authentication) thanks to [ldap3-bleeding-edge](https://pypi.org/project/ldap3-bleeding-edge) package. We will switch back to ldap3 main branch when the required PR are merged.
+- Kerberos actions (getTGT, getST, getNThash) supports certificate authentication, thanks to PKINIT
+- [Interactive shell !](#interactive-mode) (because it's cool)
+
+
+## Supported authentications
+
+|       LDAP    (get/add/remove/modify/query)            |    Flags                 |   Comments                                       | 
+|---                                                     |---                       |---                                               |
+|       NTLM (cleartext password)                        |   `-p`                   | Fall back to simple authentication when failing  |
+|       NTLM (hash)                                      |   `-H`                   |                                                  |   
+|       Kerberos (cleartext password)                    |   `-p` `-k`              |                                                  |       
+|       Kerberos (hash)                                  |   `-H` `-k`              |                                                  |    
+|       Kerberos (aeskey)                                |   `--aes-key`            |                                                  |      
+|       Kerberos (ccache)                                |   `-k`                   | Try to to load ccache from KRB5CCNAME env        |      
+|       Schannel (certificate)                           |   `-pfx`                 |                                                  |      
+|       Schannel (certificate)                           |   `-cert` `-key`         |                                                  |      
+
+
+|       Kerberos    (getTGT, getST, getNThash)           |    Flags                 |                                                  |       
+|---                                                     |---                       |---                                               |
+|       Kerberos (cleartext password)                    |   `-p`                   |                                                  |       
+|       Kerberos (hash)                                  |   `-H`                   |                                                  |      
+|       Kerberos (aeskey)                                |   `--aes-key`            |                                                  |     
+|       Kerberos (ccache)                                |   `-k`                   |  for getST function only                         |       
+|       Kerberos (certificate via PKINIT)                |   `-pfx`                 |                                                  |      
+|       Kerberos (certificate via PKINIT)                |   `-cert` `-key`         |                                                  |       
 
 
 # Installation
+
 ```
-git clone git@github.com:LightxR/pwnAD.git
-cd pwnAD
-pipx install .
+pipx install "git+https://github.com/LightxR/pwnAD"
 ```
 
 # Usage
@@ -343,7 +368,7 @@ add RBCD             add dcsync           add groupMember      add write_gpo_dac
 add computer         add genericAll       add user  
 ```
 
-One of the most significant advantage of using the interactive shell is that you juste need to focus on the actions you want to perform.
+One of the most significant advantage of using the interactive shell is that you just need to focus on the actions you want to perform.
 You are connected as lowpriv user ? Just type getTGT and you get a TGT for that user.
 
 ```
