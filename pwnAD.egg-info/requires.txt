@@ -1,0 +1,6 @@
+asn1crypto
+cryptography>=39.0
+impacket
+ldap3-bleeding-edge
+pyasn1==0.4.8
+dsinternals

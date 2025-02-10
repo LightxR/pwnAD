@@ -1,0 +1,2 @@
+[console_scripts]
+pwnAD = pwnAD.main:main
