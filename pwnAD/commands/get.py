@@ -1,10 +1,14 @@
+from impacket.ldap import ldaptypes
+from ldap3.protocol.microsoft import security_descriptor_control
+from ldap3.protocol.formatters.formatters import format_sid
+from ldap3.utils.conv import escape_filter_chars
+from ldap3 import BASE
+import ldap3
+import logging
+
 from pwnAD.lib.accesscontrol import *
 from pwnAD.lib.utils import format_list_results
 from pwnAD.commands.query import query
-
-from impacket.ldap import ldaptypes
-from ldap3 import BASE
-import logging
 
 
 def users(conn):
@@ -189,3 +193,24 @@ def RBCD(conn):
             logging.info('Attribute msDS-AllowedToActOnBehalfOfOtherIdentity is empty')
 
 
+def owner(conn, target: str):
+    target_dn, _ = conn.ldap_get_user(target)
+    controls = security_descriptor_control(sdflags=0x01)
+    conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'], controls=controls)
+    try:
+        target_principal = conn._ldap_connection.entries[0]
+        logging.debug(f'Target principal found in LDAP : {target}')
+    except IndexError:
+        logging.error(f'Target principal not found in LDAP : {target}')
+        return
+    
+    target_principal_raw_security_descriptor = target_principal['nTSecurityDescriptor'].raw_values[0]
+    target_principal_security_descriptor = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_principal_raw_security_descriptor)
+
+    current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
+    logging.info("Current owner information below")
+    logging.info("- SID: %s" % current_owner_SID)
+    logging.info("- sAMAccountName: %s" % conn.get_samaccountname_from_sid(current_owner_SID))
+    conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
+    current_owner_distinguished_name = conn._ldap_connection.entries[0]
+    logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])

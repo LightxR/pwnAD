@@ -6,6 +6,8 @@ import logging
 from impacket.ldap import ldaptypes
 from ldap3 import MODIFY_REPLACE
 from ldap3.utils.conv import escape_filter_chars
+from ldap3.protocol.microsoft import security_descriptor_control
+from ldap3.protocol.formatters.formatters import format_sid
 
 from pwnAD.lib.utils import check_error
 
@@ -25,31 +27,49 @@ def password(conn, account, new_password):
 
 
 def owner(conn, target: str, new_owner: str):
-
-    _, new_sid = conn.ldap_get_user(new_owner)
     target_dn, _ = conn.ldap_get_user(target)
- 
-    res = conn.search(search_base=target_dn, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'])
-    if res is None:
-        logging.error('Failed to get forest\'s SD')
+    controls = security_descriptor_control(sdflags=0x01)
+    conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'], controls=controls)
+    try:
+        target_principal = conn._ldap_connection.entries[0]
+        logging.debug(f'Target principal found in LDAP : {target}')
+    except IndexError:
+        logging.error(f'Target principal not found in LDAP : {target}')
+        return
+    
+    target_principal_raw_security_descriptor = target_principal['nTSecurityDescriptor'].raw_values[0]
+    target_principal_security_descriptor = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_principal_raw_security_descriptor)
 
-    target_dn_sd = conn._ldap_connection.entries[0].entry_raw_attributes
-    if target_dn_sd['nTSecurityDescriptor'] == []:
-        return "User doesn't have right read nTSecurityDescriptor!"
+    conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(new_owner), attributes=['objectSid'])
+    try:
+        new_owner_SID = format_sid(conn._ldap_connection.entries[0]['objectSid'].raw_values[0])
+        logging.debug("Found new owner SID: %s" % new_owner_SID)
+    except IndexError:
+        logging.error('New owner SID not found in LDAP (%s)' % target)
+        return
 
-    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_dn_sd['nTSecurityDescriptor'][0])
-    new_sd = copy.deepcopy(sd)
-    old_sid = new_sd['OwnerSid'].formatCanonical()
+    current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
+    logging.info("Current owner information below")
+    logging.info("- SID: %s" % current_owner_SID)
+    logging.info("- sAMAccountName: %s" % conn.get_samaccountname_from_sid(current_owner_SID))
+    conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
+    current_owner_distinguished_name = conn._ldap_connection.entries[0]
+    logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
 
-    if old_sid == new_sid:
-        logging.warning(f"[!] {old_sid} is already the owner, no modification will be made")
-    else:
-        new_sd["OwnerSid"].fromCanonical(new_sid)
+    logging.debug('Attempt to modify the OwnerSid')
+    _new_owner_SID = ldaptypes.LDAP_SID()
+    _new_owner_SID.fromCanonical(new_owner_SID)
+    target_principal_security_descriptor['OwnerSid'] = _new_owner_SID
 
-        try:
-            conn.modify(target_dn, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
-            logging.info(f"Old owner {old_sid} is now replaced by {new_owner} on {target}")
-        except Exception as e:
+    try:
+        conn.modify(
+            target_principal.entry_dn,
+            {'nTSecurityDescriptor': (ldap3.MODIFY_REPLACE, [
+                target_principal_security_descriptor.getData()
+            ])},
+            controls=security_descriptor_control(sdflags=0x01))
+        logging.info('OwnerSid modified successfully!')
+    except Exception as e:
             error_code = conn._ldap_connection.result['result']
             check_error(conn, error_code, e)
 

@@ -522,6 +522,19 @@ class LDAPConnection:
         else:
             logging.error(f"No sAMAccountName found for DN '{dn}'")
 
+    def get_samaccountname_from_sid(self, sid):
+        search_filter = f"(objectSid={sid})"
+
+        self._ldap_connection.search(search_base=self._baseDN, 
+                                    search_filter=search_filter, 
+                                    search_scope=ldap3.SUBTREE, 
+                                    attributes=['samaccountname'])
+        
+        if self._ldap_connection.entries:
+            return self._ldap_connection.entries[0].sAMAccountName.value
+        else:
+            logging.error(f"No sAMAccountName found for SID '{sid}'")
+
     def get_dn_from_samaccountname(self, samaccountname, object_class):
         search_filter = f"(&(objectClass={object_class})(sAMAccountName={samaccountname}))"
 
