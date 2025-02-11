@@ -190,6 +190,10 @@ def get_parser(interactive=False):
     get_accounts_with_sid_histoy_parser = get_subparsers.add_parser('accounts_with_sid_histoy', help="Retreive accounts with SID history")
     all_subparsers.append(get_accounts_with_sid_histoy_parser)
 
+    get_owner_parser = get_subparsers.add_parser('owner', help="Get the owner of a specified object")
+    get_owner_parser.add_argument("target", action="store", help="Object you want to known the owner")
+    all_subparsers.append(get_owner_parser)
+
 
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
