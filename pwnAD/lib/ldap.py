@@ -304,6 +304,7 @@ class LDAPConnection:
 
     def _schannel_auth(self, ldap_scheme):
         logging.debug(f"LDAP authentication with SChannel: ldap_scheme = {ldap_scheme} with port {self.port}")
+        self.user = f"{self.domain.upper()}\{self.ldap_user}"
 
         if self.pfx:
             with open(self.pfx, "rb") as f:
@@ -352,7 +353,6 @@ class LDAPConnection:
             return
         
         who_am_i = ldap_connection.extend.standard.who_am_i()
-        self.user = who_am_i
         if not who_am_i:
             logging.critical('Certificate authentication failed')
             sys.exit(-1)
