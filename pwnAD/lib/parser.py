@@ -200,6 +200,8 @@ def get_parser(interactive=False):
     get_laps_parser = get_subparsers.add_parser('laps', help="Retreive laps passwords")
     all_subparsers.append(get_laps_parser)
 
+    get_gmsa_parser = get_subparsers.add_parser('gmsa', help="Retreive gmsa passwords")
+    all_subparsers.append(get_gmsa_parser)
 
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
