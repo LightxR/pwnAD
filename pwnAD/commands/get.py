@@ -8,7 +8,7 @@ import ldap3
 import logging
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import format_list_results
+from pwnAD.lib.utils import format_list_results, check_error
 from pwnAD.commands.query import query
 
 
@@ -223,3 +223,16 @@ def machine_quota(conn):
         logging.info(f"MachineAccountQuota: {maq}")
     except PyAsn1Error:
         logging.error("MachineAccountQuota: <not set>")
+
+def laps(conn):
+    try:
+        conn.search(search_base=conn._baseDN, search_filter='(&(objectCategory=computer)(ms-MCS-AdmPwd=*))', attributes=["ms-Mcs-AdmPwd","SAMAccountname"])
+        results = conn._ldap_connection.entries
+        for result in results:
+            logging.info(f'{result["SAMAccountname"]} : {result["ms-MCS-AdmPwd"]}')
+    except Exception as e:
+        if e.args[0] == "invalid attribute type ms-Mcs-AdmPwd":
+            logging.error(("This domain does not have LAPS configured"))
+        else:
+            error_code = conn._ldap_connection.result['result']
+            check_error(conn, error_code, e)
