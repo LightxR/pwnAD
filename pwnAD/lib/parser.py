@@ -194,6 +194,9 @@ def get_parser(interactive=False):
     get_owner_parser.add_argument("target", action="store", help="Object you want to known the owner")
     all_subparsers.append(get_owner_parser)
 
+    get_machine_quota_parser = get_subparsers.add_parser('machine_quota', help="Retreive machine_quota from domain")
+    all_subparsers.append(get_machine_quota_parser)
+
 
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')

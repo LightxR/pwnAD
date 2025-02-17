@@ -3,6 +3,7 @@ from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.utils.conv import escape_filter_chars
 from ldap3 import BASE
+from pyasn1.error import PyAsn1Error
 import ldap3
 import logging
 
@@ -214,3 +215,11 @@ def owner(conn, target: str):
     conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
     current_owner_distinguished_name = conn._ldap_connection.entries[0]
     logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
+
+def machine_quota(conn):
+    conn.search(search_base=conn._baseDN, search_filter="(objectClass=*)", attributes=["ms-DS-MachineAccountQuota"])
+    try:
+        maq = conn._ldap_connection.entries[0]["ms-DS-MachineAccountQuota"]
+        logging.info(f"MachineAccountQuota: {maq}")
+    except PyAsn1Error:
+        logging.error("MachineAccountQuota: <not set>")

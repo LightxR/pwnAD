@@ -160,6 +160,8 @@ class LDAPConnection:
                 self._ntlm_auth(ldap_scheme, seal_and_sign=True)
                 return
 
+        except Exception as e:
+            logging.info(f"Couldn't connect to LDAP server.\n{e}")
         who_am_i = ldap_connection.extend.standard.who_am_i()
         logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
 
@@ -346,6 +348,7 @@ class LDAPConnection:
 
                 ldap_connection.open()
         except Exception as e:
+            raise e 
             return
         
         who_am_i = ldap_connection.extend.standard.who_am_i()
