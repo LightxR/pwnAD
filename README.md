@@ -1,85 +1,75 @@
 # pwnAD
 
-Status : currently in active development
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-yellow.svg)](https://github.com/LightxR/pwnAD)
 
-pwnAD is a tool that focuses on Active Directory exploitation, mainly using LDAP and kerberos protocols at the moment but others protocols and features might be added in the future (hopefully).
+pwnAD is a powerful tool for Active Directory exploitation, focusing primarily on LDAP and Kerberos protocols. Additional protocols and features are planned for future releases.
 
-The tool still contains bugs and some features are not fully operational (for now, better specify a username even when authenticating with certificates). <br>
-So, don't hesitate to open an issue or make a pull request, I will gladly take it into account as soon as I can.
+> **Note:** This tool is currently in active development. Some features may not be fully operational (when using certificate authentication, it's recommended to specify a username). Please open an issue or submit a pull request if you encounter any problems.
 
+## Table of Contents
 
+- [Installation](#installation)
+- [Usage](#usage)
+- [LDAP Actions](#ldap-actions)
+- [Special Modules](#special-modules)
+- [Kerberos Actions](#kerberos-actions)
 
-# Table of content
+## Features
 
-- [pwnAD](#pwnAD)
-    - [Table of content](#table-of-content)
-    - [Features](#features)
-      - [Supported authentication](#supported-authentication)
-    - [Installation](#installation)
-    - [Usage](#usage)
-    - [LDAP actions](#ldap-actions)
-      - [add](#add)
-      - [remove](#remove)
-      - [get](#get)
-      - [modify](#modify)
-      - [query](#query)
-    - [Special modules](#special-modules)
-      - [shadow](#shadow)
-    - [Kerberos actions](#kerberos-actions)
-      - [getTGT](#gettgt)
-      - [getST](#getst)
-      - [getNTHash](#getnthash)
-    - [Interactive mode](#interactive-mode)
-      - [infos](#infos)
-      - [start_tls](#start_tls)
-      - [rebind](#rebind)
-      - [switch_user](#switch_user)
-    - [Credits](#credits)
+- **Multiple authentication methods** - Support for NTLM, Kerberos, and certificate-based authentication
+- **LDAP enumeration and exploitation** - Extensive support for LDAP operations
+- **Enhanced security support** - LDAP signing and channel binding for both simple and NTLM authentication via [ldap3-bleeding-edge](https://pypi.org/project/ldap3-bleeding-edge/)
+- **Certificate-based attacks** - Kerberos actions (getTGT, getST, getNThash) supporting certificate authentication via PKINIT
+- **Interactive shell** - User-friendly command-line interface with tab completion
 
-# Features
+### Supported Authentication Methods
 
-The main features are :
-- Many supported authentications (see after)
-- LDAP enumeration and exploitation
-- LDAP connection supports LDAP signing and channel binding (simple and NTLM authentication) thanks to [ldap3-bleeding-edge](https://pypi.org/project/ldap3-bleeding-edge) package. We will switch back to ldap3 main branch when the required PR are merged.
-- Kerberos actions (getTGT, getST, getNThash) supports certificate authentication, thanks to PKINIT
-- [Interactive shell !](#interactive-mode) (because it's cool)
+#### LDAP Operations (get/add/remove/modify/query)
 
+| Method | Flags | Comments |
+|--------|-------|----------|
+| NTLM (cleartext password) | `-p` | Falls back to simple authentication when failing |
+| NTLM (hash) | `-H` | |
+| Kerberos (cleartext password) | `-p` `-k` | |
+| Kerberos (hash) | `-H` `-k` | |
+| Kerberos (aeskey) | `--aes-key` | |
+| Kerberos (ccache) | `-k` | Tries to load ccache from KRB5CCNAME env |
+| Schannel (certificate) | `-pfx` | |
+| Schannel (certificate) | `-cert` `-key` | |
 
-## Supported authentications
+#### Kerberos Operations (getTGT, getST, getNThash)
 
-|       LDAP    (get/add/remove/modify/query)            |    Flags                 |   Comments                                       | 
-|---                                                     |---                       |---                                               |
-|       NTLM (cleartext password)                        |   `-p`                   | Fall back to simple authentication when failing  |
-|       NTLM (hash)                                      |   `-H`                   |                                                  |   
-|       Kerberos (cleartext password)                    |   `-p` `-k`              |                                                  |       
-|       Kerberos (hash)                                  |   `-H` `-k`              |                                                  |    
-|       Kerberos (aeskey)                                |   `--aes-key`            |                                                  |      
-|       Kerberos (ccache)                                |   `-k`                   | Try to to load ccache from KRB5CCNAME env        |      
-|       Schannel (certificate)                           |   `-pfx`                 |                                                  |      
-|       Schannel (certificate)                           |   `-cert` `-key`         |                                                  |      
+| Method | Flags | Comments |
+|--------|-------|----------|
+| Kerberos (cleartext password) | `-p` | |
+| Kerberos (hash) | `-H` | |
+| Kerberos (aeskey) | `--aes-key` | |
+| Kerberos (ccache) | `-k` | For getST function only |
+| Kerberos (certificate via PKINIT) | `-pfx` | |
+| Kerberos (certificate via PKINIT) | `-cert` `-key` | |
 
+## Installation
 
-|       Kerberos    (getTGT, getST, getNThash)           |    Flags                 |                                                  |       
-|---                                                     |---                       |---                                               |
-|       Kerberos (cleartext password)                    |   `-p`                   |                                                  |       
-|       Kerberos (hash)                                  |   `-H`                   |                                                  |      
-|       Kerberos (aeskey)                                |   `--aes-key`            |                                                  |     
-|       Kerberos (ccache)                                |   `-k`                   |  for getST function only                         |       
-|       Kerberos (certificate via PKINIT)                |   `-pfx`                 |                                                  |      
-|       Kerberos (certificate via PKINIT)                |   `-cert` `-key`         |                                                  |       
-
-
-# Installation
-
-```
+```bash
 pipx install "git+https://github.com/LightxR/pwnAD"
 ```
 
-# Usage
+## Usage
+
+The tool uses actions as positional arguments:
+
+- **LDAP actions**: add, remove, get, modify, query
+- **Special modules**: shadow (more planned for the future)
+- **Kerberos actions**: getTGT, getST, getNThash
+
+### Basic Help
+
+```bash
+pwnAD -h
+```
 
 ```
-pwnAD -h
 usage: pwnAD [-h] [--dc-ip ip address] [--kdcHost FQDN KDC] [-d DOMAIN] [-u USER] [--port PORT] [--tls]
              [-p PASSWORD | -H [LMHASH:]NTHASH | --aes-key hex key] [-k] [-pfx PFX] [-pfx-pass pfx password] [-key key]
              [-cert cert] [--debug] [-i]
@@ -130,21 +120,15 @@ Certificate authentication:
                         password for pfx/p12 file
   -key key              .key file for certificate authentication
   -cert cert            .crt file for certificate authentication
-
 ```
 
+## LDAP Actions
 
-The tool takes an action as positionnal argument :
-- LDAP actions : add, remove, get, modify, query
-- Special modules : shadow (more modules in the future, feel free to propose some if you have any idea)
-- Kerberos actions : getTGT, getST, getNThash
+### add
 
-# LDAP actions
+Add various objects or permissions to Active Directory.
 
-## add
-
-
-```
+```bash
 pwnAD [robco.corp\administrator]> add -h
 usage: pwnAD add [-h] {user,computer,dcsync,genericAll,groupMember,write_gpo_dacl,RBCD} ...
 
@@ -163,10 +147,11 @@ options:
   -h, --help            show this help message and exit
 ```
 
+### remove
 
-## remove
+Remove objects or permissions from Active Directory.
 
-```
+```bash
 pwnAD [robco.corp\administrator]> remove -h
 usage: pwnAD remove [-h] {computer,user,groupMember,dcsync,genericAll,RBCD} ...
 
@@ -184,10 +169,11 @@ options:
   -h, --help            show this help message and exit
 ```
 
+### get
 
-## get
+Retrieve various objects or information from Active Directory.
 
-```
+```bash
 pwnAD [robco.corp\administrator]> get -h
 usage: pwnAD get [-h]
                  {user,users,members,membership,computers,DC,servers,CA,OU,containers,spn,constrained_delegation,unconstrained_delegation,RBCD,not_trusted_for_delegation,asreproastables,kerberoastables,password_not_required,groups,protected_users,users_description,passwords_dont_expire,users_with_admin_count,accounts_with_sid_histoy}
@@ -232,10 +218,11 @@ options:
   -h, --help            show this help message and exit
 ```
 
+### modify
 
-## modify
+Modify various objects or attributes in Active Directory.
 
-```
+```bash
 pwnAD [robco.corp\administrator]> modify -h
 usage: pwnAD modify [-h] {password,owner,computer_name,dontreqpreauth,disable_account,enable_account} ...
 
@@ -253,11 +240,11 @@ options:
   -h, --help            show this help message and exit
 ```
 
-## query
+### query
 
-Performs a raw LDAP query. 
+Perform raw LDAP queries against Active Directory.
 
-```
+```bash
 pwnAD [robco.corp\administrator]> query -h
 usage: pwnAD query [-h] search_filter attributes
 
@@ -269,14 +256,13 @@ options:
   -h, --help     show this help message and exit
 ```
 
+## Special Modules
 
-# Special modules
+### shadow
 
-## shadow
+An implementation of Certipy's shadow credentials attack.
 
-This module is an implementation of Certipy shadow.
-
-```
+```bash
 pwnAD [robco.corp\administrator]> shadow -h
 usage: pwnAD shadow [-h] {auto,add,list,clear,remove,info} ...
 
@@ -296,35 +282,33 @@ options:
   -h, --help            show this help message and exit
 ```
 
+## Kerberos Actions
 
-# Kerberos actions
+### getTGT
 
-## getTGT
+Get a Kerberos Ticket Granting Ticket (TGT). Supports PKINIT for certificate authentication.
 
-Standard getTGT from impacket but with PKINIT if certificate authentication is provided.
-
-```
+```bash
 pwnAD [robco.corp\administrator]> getTGT
 [*] Trying to get TGT...
 [*] Saving ticket in administrator.ccache
 ```
 
+### getST
 
-## getST
+Get a Kerberos Service Ticket (ST). Supports PKINIT for certificate authentication.
 
-Standard getST from impacket but with PKINIT if certificate authentication is provided.
-
-```
+```bash
 pwnAD [robco.corp\administrator]> getST -spn host/dc01
 [*] Getting ST for user
 [*] Saving ticket in administrator@host_dc01@ROBCO.CORP.ccache
 ```
 
+### getNThash
 
-## getNThash
+Retrieve NT hash for a user using their certificate via PKINIT.
 
-getNThash allows you to retreive NThash from a user when you own his certificate. Magic is done with PKINIT.
-```
+```bash
 pwnAD [u:ROBCO\Administrator]> getNThash 
 [*] Trying to get TGT...
 [*] Got TGT
@@ -333,18 +317,18 @@ pwnAD [u:ROBCO\Administrator]> getNThash
 [*] Got NThash for administrator: 7c8beec53973ada7cc96009c5e68f5fc
 ```
 
+## Interactive Mode
 
-# Interactive mode
+pwnAD includes a convenient interactive shell mode for streamlined operations. Use the `-i` or `--interactive` flag along with connection details to start the interactive mode.
 
-Because it is always more convenient, the interactive mode is here. 
-Use the `-i` or `--interactive` flag along with connection details to start the interactive mode.
+```bash
+pwnAD -i --dc-ip 192.168.100.5 -u administrator -p 'Veryprotected123!' --tls
+```
 
 ```
-pwnAD -i --dc-ip 192.168.100.5 -u administrator -p 'Veryprotected123!' --tls                                       
-
  ____ ____ ____ ____ ____ 
-||p |||w |||n |||A |||D ||
-||__|||__|||__|||__|||__||
+|p ||w ||n ||A ||D |
+|__||__||__||__||__|
 |/__\|/__\|/__\|/__\|/__\|
 
 Version 0.0.1 by @LightxR 
@@ -353,45 +337,29 @@ Version 0.0.1 by @LightxR
 pwnAD [robco.corp\administrator]> 
 ```
 
-Once started, you can type `help` or press tabulation to show the available actions :
+Once started, you can type `help` or press tab to show the available actions:
+
 ```
 pwnAD [robco.corp\administrator]> 
 add           getNThash     getTGT        modify        rebind        shadow        switch_user   
 get           getST         infos         query         remove        start_tls  
 ```
 
+Autocompletion is available for all commands and subcommands:
 
-Autocompletion is active and you should be able to access available commands and functions by pressing tabulation once again :
 ```
 pwnAD [robco.corp\administrator]> add 
 add RBCD             add dcsync           add groupMember      add write_gpo_dacl   
 add computer         add genericAll       add user  
 ```
 
-One of the most significant advantage of using the interactive shell is that you just need to focus on the actions you want to perform.
-You are connected as lowpriv user ? Just type getTGT and you get a TGT for that user.
+### Interactive Mode Features
 
-```
-pwnAD [robco.corp\lowpriv]> getTGT 
-[*] Trying to get TGT...
-[*] Saving ticket in lowpriv.ccache
-```
+#### infos
 
-You want a TGT from another user ? Just type getTGT with the credentials of that other user (if you are targeting the same DC/domain)
-```
-pwnAD [robco.corp\administrator]> getTGT -u lowpriv2 -p Veryprotected123!
-[*] Trying to get TGT...
-[*] Saving ticket in lowpriv2.ccache
-```
+Display current LDAP connection details.
 
-Everything looks simple.
-
-
-## infos
-
-`Infos` command display the current LDAP connection details.
-
-```
+```bash
 pwnAD [robco.corp\administrator]> infos
 [*] Target: 	192.168.99.10
 [*] Port: 	389
@@ -408,13 +376,11 @@ pwnAD [robco.corp\administrator]> infos
 [*] TLS: 	False
 ```
 
-## start_tls
+#### start_tls
 
-When you are connected on standard port 389 (LDAP) and not port 636 (LDAPS), some actions requiring secure connection (like modifing a user password) won't be possible.
-You can manually start a TLS connection with `start_tls` and therefore be allowed to performed these actions.
-This functionnality might be implemented in the future to be performed automatically.
+Initiate a TLS connection when connected on standard port 389.
 
-```
+```bash
 pwnAD [robco.corp\administrator]> modify password lowpriv Veryprotected123!
 [-] Server unwilling to perform the operation: LDAPUnwillingToPerformResult - 53 - unwillingToPerform - None - 0000001F: SvcErr: DSID-031A124C, problem 5003 (WILL_NOT_PERFORM), data 0
  - modifyResponse - None
@@ -427,13 +393,11 @@ pwnAD [robco.corp\administrator]> modify password lowpriv Veryprotected123!
 [*] Successfully changed lowpriv password to: Veryprotected123!
 ```
 
-## rebind
+#### rebind
 
-Sometimes, your connection can timeout. 
-Instead of launching the interactive shell once again, juste type `rebind`
+Reconnect to the server if the connection times out.
 
-
-```
+```bash
 pwnAD [robco.corp\administrator]> shadow list lowpriv
 [-] An error has occured : socket sending error[Errno 104] Connection reset by peer
 
@@ -446,24 +410,11 @@ pwnAD [robco.corp\administrator]> shadow list lowpriv
 [*] DeviceID:1d8669ab-6a68-a58c-6b46-606e3623f579 | Creation Time (UTC): 2025-02-03 11:13:41.298149
 ```
 
+#### switch_user
 
-## switch_user
+Change the user context without restarting the interactive shell.
 
-Once again, instead of exiting current interactive session and executing a new pwnAD command, just switch user with new connection details.
-What is nice here is that you don't have to pass domain and ip address arguments if you are targetting the same host/domain
-
-```
-pwnAD -i -u administrator -p 'Veryprotected123!' --dc-ip 192.168.99.10 -d robco.corp
-
- ____ ____ ____ ____ ____ 
-||p |||w |||n |||A |||D ||
-||__|||__|||__|||__|||__||
-|/__\|/__\|/__\|/__\|/__\|
-
-Version 0.1 by @LightxR 
-
-"Jack of all trades, master of none."
-
+```bash
 pwnAD [robco.corp\administrator]> switch_user -u lowpriv -p Veryprotected123!
 [*] Successfully switched user to lowpriv.
 
@@ -481,31 +432,26 @@ pwnAD [robco.corp\lowpriv]> infos
 [*] cert: 	None
 [*] kerberos: 	False
 [*] TLS: 	False
-pwnAD [robco.corp\lowpriv]> 
-
 ```
 
-## Others features
+#### Execute OS Commands
 
-When you are using the interactive shell, you can execute OS command by prefixing `!`
+Run operating system commands by prefixing with `!`:
 
-```
+```bash
 pwnAD [robco.corp\administrator]> !ls
 LICENSE	 pwnAD   README.md  setup.py  stimpack.recipe
 ```
 
-It can be useful for setting KRB5CCNAME variable for example without exiting your interactive session.
+This is useful for setting environment variables like `KRB5CCNAME` without exiting the interactive session.
 
+## Credits
 
-# Credits
-
-`pwnAD` has been built on inspiration from the following tool architectures or by implementing directly some functionalities.
-`pwnAD` code has been commented in this way to pay credit to the contributors of the open source community, so if any comment is missing please let me know.
-
+pwnAD is built on inspiration from the following tools and contributors:
 
 - [ly4k](https://twitter.com/ly4k_) for [Certipy](https://github.com/ly4k/Certipy)
 - [CravateRouge](https://cravaterouge.bsky.social) for [bloodyAD](https://github.com/CravateRouge/bloodyAD)
-- [p0dalirius](https://twitter.com/podalirius_) and [Shutdown](https://twitter.com/_nwodtuhs) for [PyWhisker](https://github.com/ShutdownRepo/pywhisker), [rbcd.py](https://github.com/fortra/impacket/blob/master/examples/rbcd.py) and many others contributions.
+- [p0dalirius](https://twitter.com/podalirius_) and [Shutdown](https://twitter.com/_nwodtuhs) for [PyWhisker](https://github.com/ShutdownRepo/pywhisker), [rbcd.py](https://github.com/fortra/impacket/blob/master/examples/rbcd.py) and many other contributions
 - [Dirk-jan](https://twitter.com/_dirkjan) for [PKINITtools](https://github.com/dirkjanm/PKINITtools)
 - [AlmondOffsec](https://offsec.almond.consulting) for [PassTheCert](https://github.com/AlmondOffSec/PassTheCert)
 - [Fortra](https://github.com/fortra) and all the [contributors](https://github.com/fortra/impacket/graphs/contributors) for [Impacket](https://github.com/fortra/impacket)
