@@ -271,7 +271,7 @@ def gmsa(conn):
             sam = entry['sAMAccountName'].value
             logging.info(f'Users or groups who can read password for {sam}:')
             for dacl in SR_SECURITY_DESCRIPTOR(data=entry['msDS-GroupMSAMembership'].raw_values[0])['Dacl']['Data']:
-                conn.search(base_creator(args.domain), '(&(objectSID='+dacl['Ace']['Sid'].formatCanonical()+'))', attributes=['sAMAccountName'])
+                conn.search(conn._baseDN, '(&(objectSID='+dacl['Ace']['Sid'].formatCanonical()+'))', attributes=['sAMAccountName'])
                 
                 # Added this check to prevent an error from occuring when there are no results returned
                 if len(conn._ldap_connection.entries) != 0:
