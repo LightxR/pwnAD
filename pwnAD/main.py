@@ -41,24 +41,27 @@ def main():
             'force_forwardable' : options.force_forwardable,
             'renew' : options.renew
         }
-        
-    authenticate = Authenticate(
-        domain=options.domain,
-        dc_ip=options.dc_ip,
-        username=options.username,
-        password=options.password,
-        hashes=options.hashes,
-        aesKey=options.aesKey,
-        pfx=options.pfx,
-        pfx_pass=options.pfx_pass,
-        key=options.key,
-        cert=options.cert,
-        use_kerberos=options.use_kerberos,
-        kdcHost=options.kdcHost,
-        _do_tls=options._do_tls,
-        port=options.port,
-        **authenticate_kwargs
-    )
+    try:
+        authenticate = Authenticate(
+            domain=options.domain,
+            dc_ip=options.dc_ip,
+            username=options.username,
+            password=options.password,
+            hashes=options.hashes,
+            aesKey=options.aesKey,
+            pfx=options.pfx,
+            pfx_pass=options.pfx_pass,
+            key=options.key,
+            cert=options.cert,
+            use_kerberos=options.use_kerberos,
+            kdcHost=options.kdcHost,
+            _do_tls=options._do_tls,
+            port=options.port,
+            **authenticate_kwargs
+        )
+    except ValueError as e:
+        logging.error(f"Authentication failed: {e}")
+        return 
 
     if options.action in ["getTGT", "getST", "getNThash", "getPFX"]:
         try:
