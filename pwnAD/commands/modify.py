@@ -144,7 +144,7 @@ def _toggle_account_enable_disable(conn, user_name, enable):
         return
 
     entry = conn._ldap_connection.entries[0]
-    userAccountControl = entry["userAccountControl"].value
+    userAccountControl = int(entry["userAccountControl"].value)
 
     logging.info("Original userAccountControl: %d" % userAccountControl) 
 
