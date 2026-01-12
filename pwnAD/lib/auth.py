@@ -75,7 +75,7 @@ class Authenticate:
             self.use_kerberos = True
         if self.use_kerberos is True and self.kdcHost is None:
             logging.warning("Specify KDC's Hostname of FQDN using the argument --kdcHost")
-            return False
+            raise ValueError("KDC hostname must be specified when using Kerberos")
 
     def ldap_authentication(self):
 

@@ -160,6 +160,8 @@ class LDAPConnection:
                 self._ntlm_auth(ldap_scheme, seal_and_sign=True)
                 return
 
+        except Exception as e:
+            logging.info(f"Couldn't connect to LDAP server.\n{e}")
         who_am_i = ldap_connection.extend.standard.who_am_i()
         logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
 
@@ -302,6 +304,7 @@ class LDAPConnection:
 
     def _schannel_auth(self, ldap_scheme):
         logging.debug(f"LDAP authentication with SChannel: ldap_scheme = {ldap_scheme} with port {self.port}")
+        self.user = f"{self.domain.upper()}\{self.ldap_user}"
 
         if self.pfx:
             with open(self.pfx, "rb") as f:
@@ -346,10 +349,10 @@ class LDAPConnection:
 
                 ldap_connection.open()
         except Exception as e:
+            raise e 
             return
         
         who_am_i = ldap_connection.extend.standard.who_am_i()
-        self.user = who_am_i
         if not who_am_i:
             logging.critical('Certificate authentication failed')
             sys.exit(-1)

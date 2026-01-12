@@ -130,7 +130,8 @@ def start_interactive_mode(conn):
                         
                     conn = authenticate.ldap_authentication()
                     logging.info(f"Successfully switched user to {args.username}.")
-
+                except ValueError as e:
+                    logging.error(f"Authentication failed: {e}")
                 except Exception as e:
                     logging.error(f"An error occurred when trying to switch user : {e}")
                 continue
@@ -185,24 +186,31 @@ def start_interactive_mode(conn):
                             'force_forwardable' : args.force_forwardable,
                             'renew' : args.renew
         }
-                    authenticate = Authenticate(
-                        domain=domain,
-                        dc_ip=dc_ip,
-                        username=args.username,
-                        password=args.password,
-                        hashes=args.hashes,
-                        aesKey=args.aesKey,
-                        pfx=args.pfx,
-                        pfx_pass=args.pfx_pass,
-                        key=args.key,
-                        cert=args.cert,
-                        use_kerberos=args.use_kerberos,
-                        kdcHost=args.kdcHost,
-                        _do_tls=args._do_tls,
-                        port=args.port,
-                        **authenticate_kwargs
-                    )
-                    authenticate.kerberos_authentication()
+                    try:
+                        authenticate = Authenticate(
+                            domain=domain,
+                            dc_ip=dc_ip,
+                            username=args.username,
+                            password=args.password,
+                            hashes=args.hashes,
+                            aesKey=args.aesKey,
+                            pfx=args.pfx,
+                            pfx_pass=args.pfx_pass,
+                            key=args.key,
+                            cert=args.cert,
+                            use_kerberos=args.use_kerberos,
+                            kdcHost=args.kdcHost,
+                            _do_tls=args._do_tls,
+                            port=args.port,
+                            **authenticate_kwargs
+                        )
+                        authenticate.kerberos_authentication()
+                    except ValueError as e:
+                        logging.error(f"Authentication failed: {e}")
+                        continue
+                    except Exception as e:
+                        logging.error(f"An error occurred when trying to switch user : {e}")
+                        continue
 
                     execute_action_function(args, authenticate)
                 else:
