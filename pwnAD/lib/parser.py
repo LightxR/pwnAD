@@ -75,6 +75,18 @@ def get_parser(interactive=False):
     add_rbcd_parser.add_argument("grantee", action="store", help="Service that will be granted rights to impersonate users on target")
     all_subparsers.append(add_rbcd_parser)
 
+    add_dnsrecord_parser = add_subparsers.add_parser('dnsRecord', help="Add a DNS record to Active Directory Integrated DNS")
+    add_dnsrecord_parser.add_argument("name", action="store", help="Hostname for the DNS record")
+    add_dnsrecord_parser.add_argument("data", action="store", help="Record data (IP address, hostname, or text)")
+    add_dnsrecord_parser.add_argument("--dnstype", dest="dnstype", action="store", default="A", choices=["A", "AAAA", "CNAME", "MX", "PTR", "SRV", "TXT"], help="Type of DNS record (default: A)")
+    add_dnsrecord_parser.add_argument("--zone", dest="zone", action="store", default=None, help="DNS zone name (default: current domain)")
+    add_dnsrecord_parser.add_argument("--ttl", dest="ttl", action="store", type=int, default=300, help="Time to live in seconds (default: 300)")
+    add_dnsrecord_parser.add_argument("--preference", dest="preference", action="store", type=int, default=10, help="Preference for MX records (default: 10)")
+    add_dnsrecord_parser.add_argument("--priority", dest="priority", action="store", type=int, default=0, help="Priority for SRV records (default: 0)")
+    add_dnsrecord_parser.add_argument("--weight", dest="weight", action="store", type=int, default=100, help="Weight for SRV records (default: 100)")
+    add_dnsrecord_parser.add_argument("--srvport", dest="srvport", action="store", type=int, default=80, help="Port for SRV records (default: 80)")
+    all_subparsers.append(add_dnsrecord_parser)
+
 
     # REMOVE action
     parser_remove = subparsers.add_parser('remove', help='Perform REMOVE related actions')

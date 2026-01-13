@@ -2,6 +2,7 @@ import copy
 import logging
 import random
 import string
+import ldap3
 from impacket.ldap import ldaptypes
 from ldap3.core.results import RESULT_UNWILLING_TO_PERFORM, RESULT_ENTRY_ALREADY_EXISTS, RESULT_INSUFFICIENT_ACCESS_RIGHTS, RESULT_NO_SUCH_OBJECT
 from ldap3 import MODIFY_REPLACE, MODIFY_ADD, BASE
@@ -10,6 +11,7 @@ from ldap3.protocol.microsoft import security_descriptor_control
 
 from pwnAD.lib.accesscontrol import *
 from pwnAD.lib.utils import check_error
+from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_serial
 
 
 def computer(conn, new_computer=None, new_password=None):
@@ -236,3 +238,141 @@ def RBCD(conn, target, grantee):
     except Exception as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
+
+
+def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, ttl: int = 300, preference: int = 10, priority: int = 0, weight: int = 100, srvport: int = 80):
+    """
+    Add a DNS record to Active Directory Integrated DNS.
+
+    Args:
+        conn: LDAP connection object
+        name: Hostname for the DNS record
+        data: Record data (IP address, hostname, or text)
+        dnstype: Type of DNS record (A, AAAA, CNAME, MX, PTR, SRV, TXT)
+        zone: DNS zone name (default: current domain)
+        ttl: Time to live in seconds (default: 300)
+        preference: Preference for MX records (default: 10)
+        priority: Priority for SRV records (default: 0)
+        weight: Weight for SRV records (default: 100)
+        srvport: Port for SRV records (default: 80)
+    """
+    # Use current domain as zone if not specified
+    if zone is None:
+        zone = conn.domain
+
+    logging.info(f"[*] Adding DNS record: {name}.{zone} ({dnstype}) -> {data}")
+
+    try:
+        # Build zone DN following bloodyAD pattern
+        naming_context = "," + conn._baseDN
+        zone_types = ["DomainDnsZones", "ForestDnsZones"]
+
+        serial = None
+        record_dn = None
+        existing_records = None
+        zone_dn = None
+
+        # Try to find the zone and SOA in different locations (like bloodyAD does)
+        for zone_type in zone_types:
+            zone_dn = f"DC={zone},CN=MicrosoftDNS,DC={zone_type}{naming_context}"
+            logging.debug(f"Trying zone: {zone_dn}")
+
+            try:
+                # Search for both SOA (@) and existing record in one query (bloodyAD approach)
+                conn.search(
+                    search_base=zone_dn,
+                    search_filter=f"(|(name=@)(name={name}))",
+                    search_scope=ldap3.SUBTREE,
+                    attributes=["name", "dnsRecord", "distinguishedName"],
+                )
+
+                if not conn._ldap_connection.entries:
+                    logging.debug(f"No entries found in {zone_type}")
+                    continue
+
+                # Parse results
+                for entry in conn._ldap_connection.entries:
+                    entry_name = entry.name.value if hasattr(entry.name, 'value') else str(entry.name)
+
+                    if entry_name == "@":
+                        # Found SOA record
+                        if "dnsRecord" in entry and entry["dnsRecord"].raw_values:
+                            for record_data in entry["dnsRecord"].raw_values:
+                                try:
+                                    dns_record = DNSRecord(record_data)
+                                    if dns_record.record_type == DNS_RECORD_TYPE.get("SOA", 0x0006):
+                                        serial = dns_record.serial
+                                        logging.debug(f"Found SOA serial: {serial}")
+                                        break
+                                    # Use any record's serial if SOA not found
+                                    if serial is None:
+                                        serial = dns_record.serial
+                                        logging.debug(f"Using serial from type {dns_record.record_type}: {serial}")
+                                except Exception as e:
+                                    logging.debug(f"Error parsing SOA record: {e}")
+
+                    elif entry_name.lower() == name.lower():
+                        # Found existing record
+                        record_dn = entry.distinguishedName.value
+                        existing_records = entry["dnsRecord"].raw_values if "dnsRecord" in entry else []
+                        logging.debug(f"Found existing record at: {record_dn}")
+
+                # If we found a serial, this is the right zone
+                if serial is not None:
+                    logging.debug(f"Using zone type: {zone_type}")
+                    break
+
+            except Exception as e:
+                logging.debug(f"Error searching {zone_type}: {e}")
+                continue
+
+        if serial is None:
+            raise Exception(f"No '@' entry found in any zone for '{zone}'")
+
+        # Create the DNS record
+        dns_record = DNSRecord()
+        dns_record.from_dict(
+            dns_type=dnstype,
+            record_data=data,
+            serial=serial,
+            ttl=ttl,
+            preference=preference,
+            priority=priority,
+            weight=weight,
+            port=srvport,
+        )
+
+        new_dns_record_bytes = dns_record.to_bytes()
+
+        if record_dn:
+            # Record exists, append to existing dnsRecord list (bloodyAD uses REPLACE with full list)
+            new_dnsrecord_list = list(existing_records) if existing_records else []
+            new_dnsrecord_list.append(new_dns_record_bytes)
+
+            logging.debug(f"Updating existing record at {record_dn}")
+            try:
+                conn.modify(record_dn, {"dnsRecord": [(MODIFY_REPLACE, new_dnsrecord_list)]})
+                logging.info(f"[+] {name} has been successfully updated")
+            except Exception as e:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+        else:
+            # Record doesn't exist, create it (bloodyAD approach)
+            record_dn = f"DC={name},{zone_dn}"
+            attributes = {
+                "objectClass": ["top", "dnsNode"],
+                "dnsRecord": new_dns_record_bytes,
+                "dNSTombstoned": False,  # Ensure record is not tombstoned
+            }
+
+            logging.debug(f"Creating new record at {record_dn}")
+            try:
+                conn.add(record_dn, attributes=attributes)
+                logging.info(f"[+] {name} has been successfully added")
+            except Exception as e:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+
+    except Exception as e:
+        logging.error(f"[-] Failed to add DNS record: {e}")
+        raise
