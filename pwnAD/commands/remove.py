@@ -137,6 +137,63 @@ def genericAll(conn, target, trustee):
         check_error(conn, error_code, e)    
 
 
+def uac(conn, target: str, flags: list):
+    """
+    Remove property flags from userAccountControl attribute.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target user/computer
+        flags: List of UAC flag names to remove (e.g., ['DONT_REQ_PREAUTH', 'TRUSTED_FOR_DELEGATION'])
+    """
+    # Build the UAC value from provided flags
+    uac_to_remove = 0
+    for flag in flags:
+        flag_upper = flag.upper()
+        if flag_upper not in ACCOUNT_FLAGS:
+            logging.error(f"Unknown UAC flag: {flag}")
+            logging.info(f"Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
+            return
+        uac_to_remove |= ACCOUNT_FLAGS[flag_upper]
+
+    # Search for the target and get current userAccountControl
+    conn.search(
+        conn._baseDN,
+        '(sAMAccountName=%s)' % escape_filter_chars(target),
+        attributes=['distinguishedName', 'userAccountControl']
+    )
+
+    if not conn._ldap_connection.entries:
+        logging.error(f"Target '{target}' not found in LDAP")
+        return
+
+    entry = conn._ldap_connection.entries[0]
+    target_dn = entry.entry_dn
+
+    try:
+        old_uac = entry['userAccountControl'].value
+    except (KeyError, IndexError):
+        logging.error(f"Cannot read userAccountControl attribute for '{target}'")
+        return
+
+    # Remove flags using bitwise AND with NOT
+    new_uac = old_uac & ~uac_to_remove
+
+    if new_uac == old_uac:
+        logging.info(f"Flags {flags} not set on '{target}', nothing to remove")
+        return
+
+    logging.debug(f"Original userAccountControl: {old_uac}")
+    logging.debug(f"New userAccountControl: {new_uac}")
+
+    try:
+        conn.modify(target_dn, {'userAccountControl': [(MODIFY_REPLACE, [new_uac])]})
+        logging.info(f"Successfully removed {flags} from '{target}' userAccountControl")
+    except Exception as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+
+
 def RBCD(conn, computer_name):
 
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(computer_name), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])

@@ -240,6 +240,63 @@ def RBCD(conn, target, grantee):
         check_error(conn, error_code, e)
 
 
+def uac(conn, target: str, flags: list):
+    """
+    Add property flags to userAccountControl attribute.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target user/computer
+        flags: List of UAC flag names to add (e.g., ['DONT_REQ_PREAUTH', 'TRUSTED_FOR_DELEGATION'])
+    """
+    # Build the UAC value from provided flags
+    uac_to_add = 0
+    for flag in flags:
+        flag_upper = flag.upper()
+        if flag_upper not in ACCOUNT_FLAGS:
+            logging.error(f"Unknown UAC flag: {flag}")
+            logging.info(f"Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
+            return
+        uac_to_add |= ACCOUNT_FLAGS[flag_upper]
+
+    # Search for the target and get current userAccountControl
+    conn.search(
+        conn._baseDN,
+        '(sAMAccountName=%s)' % escape_filter_chars(target),
+        attributes=['distinguishedName', 'userAccountControl']
+    )
+
+    if not conn._ldap_connection.entries:
+        logging.error(f"Target '{target}' not found in LDAP")
+        return
+
+    entry = conn._ldap_connection.entries[0]
+    target_dn = entry.entry_dn
+
+    try:
+        old_uac = entry['userAccountControl'].value
+    except (KeyError, IndexError):
+        logging.error(f"Cannot read userAccountControl attribute for '{target}'")
+        return
+
+    # Combine old UAC with new flags using bitwise OR
+    new_uac = old_uac | uac_to_add
+
+    if new_uac == old_uac:
+        logging.info(f"Flags {flags} already set on '{target}'")
+        return
+
+    logging.debug(f"Original userAccountControl: {old_uac}")
+    logging.debug(f"New userAccountControl: {new_uac}")
+
+    try:
+        conn.modify(target_dn, {'userAccountControl': [(MODIFY_REPLACE, [new_uac])]})
+        logging.info(f"Successfully added {flags} to '{target}' userAccountControl")
+    except Exception as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+
+
 def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, ttl: int = 300, preference: int = 10, priority: int = 0, weight: int = 100, srvport: int = 80):
     """
     Add a DNS record to Active Directory Integrated DNS.

@@ -87,6 +87,11 @@ def get_parser(interactive=False):
     add_dnsrecord_parser.add_argument("--srvport", dest="srvport", action="store", type=int, default=80, help="Port for SRV records (default: 80)")
     all_subparsers.append(add_dnsrecord_parser)
 
+    add_uac_parser = add_subparsers.add_parser('uac', help="Add UAC property flags to a user/computer account")
+    add_uac_parser.add_argument("target", action="store", help="sAMAccountName of the target user/computer")
+    add_uac_parser.add_argument("-f", "--flag", dest="flags", action="append", required=True, metavar="FLAG", help="UAC flag to add (can be specified multiple times, e.g. -f DONT_REQ_PREAUTH -f TRUSTED_FOR_DELEGATION)")
+    all_subparsers.append(add_uac_parser)
+
 
     # REMOVE action
     parser_remove = subparsers.add_parser('remove', help='Perform REMOVE related actions')
@@ -119,6 +124,11 @@ def get_parser(interactive=False):
     remove_rbcd_parser = remove_subparsers.add_parser('RBCD', help="Remove msDS-AllowedToActOnBehalfOfOtherIdentity attribute")
     remove_rbcd_parser.add_argument("computer_name", action="store", help="Name of the computer you wish to remove msDS-AllowedToActOnBehalfOfOtherIdentity attribute")
     all_subparsers.append(remove_rbcd_parser)
+
+    remove_uac_parser = remove_subparsers.add_parser('uac', help="Remove UAC property flags from a user/computer account")
+    remove_uac_parser.add_argument("target", action="store", help="sAMAccountName of the target user/computer")
+    remove_uac_parser.add_argument("-f", "--flag", dest="flags", action="append", required=True, metavar="FLAG", help="UAC flag to remove (can be specified multiple times, e.g. -f DONT_REQ_PREAUTH -f TRUSTED_FOR_DELEGATION)")
+    all_subparsers.append(remove_uac_parser)
 
     # GET action
     parser_get = subparsers.add_parser('get', help='Perform GET related actions')
