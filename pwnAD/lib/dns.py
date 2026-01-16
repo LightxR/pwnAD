@@ -26,7 +26,7 @@ DNS_TYPE_CODE = {v: k for k, v in DNS_RECORD_TYPE.items()}
 class DNSRecord:
     """
     DNS Record structure for Active Directory DNS operations.
-    Based on MS-DNSP specification and adapted from bloodyAD implementation.
+    Based on MS-DNSP specification.
     """
 
     def __init__(self, record_data: bytes = None):
@@ -241,7 +241,6 @@ def get_dns_zones(conn) -> tuple[str, str]:
 def get_zone_dn(conn, zone: str, forest: bool = False) -> str:
     """
     Get the DN for a specific DNS zone.
-    Constructs the DN based on bloodyAD logic.
 
     Args:
         conn: LDAP connection object
@@ -257,7 +256,6 @@ def get_zone_dn(conn, zone: str, forest: bool = False) -> str:
     # Determine zone type
     zone_type = "ForestDnsZones" if forest else "DomainDnsZones"
 
-    # Construct zone DN following bloodyAD pattern
     # DC={zone},CN=MicrosoftDNS,DC={zone_type}{naming_context}
     # Example: DC=robco.corp,CN=MicrosoftDNS,DC=DomainDnsZones,DC=robco,DC=corp
     zone_dn = f"DC={zone},CN=MicrosoftDNS,DC={zone_type}{naming_context}"

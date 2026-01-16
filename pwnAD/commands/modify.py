@@ -13,6 +13,14 @@ from pwnAD.lib.utils import check_error
 
 
 def password(conn, account, new_password):
+    """
+    Change the password of a user account.
+
+    Args:
+        conn: LDAP connection object
+        account: sAMAccountName of the user
+        new_password: New password (random 32 chars if False)
+    """
     if new_password is False:
         new_password = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
 
@@ -27,6 +35,14 @@ def password(conn, account, new_password):
 
 
 def owner(conn, target: str, new_owner: str):
+    """
+    Change the owner of a target object.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target object
+        new_owner: sAMAccountName of the new owner
+    """
     target_dn, _ = conn.ldap_get_user(target)
     controls = security_descriptor_control(sdflags=0x01)
     conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'], controls=controls)
@@ -75,7 +91,14 @@ def owner(conn, target: str, new_owner: str):
 
 
 def computer_name(conn, current_name, new_name):
-   
+    """
+    Rename a computer account (change sAMAccountName).
+
+    Args:
+        conn: LDAP connection object
+        current_name: Current sAMAccountName
+        new_name: New sAMAccountName
+    """
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(current_name), attributes=['objectSid', 'sAMAccountName'])
     computer_dn = conn._ldap_connection.entries[0].entry_dn
     if not computer_dn:
@@ -96,6 +119,14 @@ def computer_name(conn, current_name, new_name):
 
 
 def dontreqpreauth(conn, account, flag):
+    """
+    Set or unset the DONT_REQUIRE_PREAUTH flag on an account.
+
+    Args:
+        conn: LDAP connection object
+        account: sAMAccountName of the account
+        flag: "True" to set flag, "False" to unset
+    """
     UF_DONT_REQUIRE_PREAUTH = 4194304
 
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(account), attributes=['objectSid', 'userAccountControl'])
@@ -125,12 +156,22 @@ def dontreqpreauth(conn, account, flag):
 
 
 def disable_account(conn, username):
+    """Disable a user account."""
     _toggle_account_enable_disable(conn, username, False)
 
 def enable_account(conn, username):
+    """Enable a user account."""
     _toggle_account_enable_disable(conn, username, True)
 
 def _toggle_account_enable_disable(conn, user_name, enable):
+    """
+    Internal helper to enable or disable an account.
+
+    Args:
+        conn: LDAP connection object
+        user_name: sAMAccountName of the user
+        enable: True to enable, False to disable
+    """
     UF_ACCOUNT_DISABLE = 2
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(user_name), attributes=['objectSid', 'userAccountControl'])
 

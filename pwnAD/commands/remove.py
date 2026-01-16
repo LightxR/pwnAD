@@ -1,15 +1,24 @@
 import copy
 import logging
+import ldap3
 from impacket.ldap import ldaptypes
-from ldap3 import MODIFY_DELETE, MODIFY_REPLACE
+from ldap3 import MODIFY_DELETE, MODIFY_REPLACE, BASE
 from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.accesscontrol import *
 from pwnAD.lib.utils import check_error
+from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE
 
 
 def computer(conn, computer_name):
+    """
+    Delete a computer account from Active Directory.
+
+    Args:
+        conn: LDAP connection object
+        computer_name: Name of the computer to delete ($ appended automatically if missing)
+    """
     if computer_name[-1] != '$':
         computer_name = computer_name + '$'
 
@@ -29,7 +38,13 @@ def computer(conn, computer_name):
 
 
 def user(conn, user_name):
+    """
+    Delete a user account from Active Directory.
 
+    Args:
+        conn: LDAP connection object
+        user_name: sAMAccountName of the user to delete
+    """
     res = conn.exists(user_name)
     print(res)
     if not res:
@@ -48,7 +63,14 @@ def user(conn, user_name):
 
 
 def groupMember(conn, group: str, member: str):
+    """
+    Remove a user from a group.
 
+    Args:
+        conn: LDAP connection object
+        group: sAMAccountName of the target group
+        member: sAMAccountName of the user to remove
+    """
     user_dn = conn.get_dn_from_samaccountname(member, 'user')
     group_dn = conn.get_dn_from_samaccountname(group, 'group')
 
@@ -61,7 +83,13 @@ def groupMember(conn, group: str, member: str):
 
 
 def dcsync(conn, trustee):
+    """
+    Remove DCSync rights from a user by removing replication ACEs.
 
+    Args:
+        conn: LDAP connection object
+        trustee: sAMAccountName of the user to remove DCSync rights from
+    """
     targetDN, targetSID = conn.ldap_get_user(trustee)
     logging.debug(f"targetSID : {targetSID}")
 
@@ -100,6 +128,14 @@ def dcsync(conn, trustee):
 
 
 def genericAll(conn, target, trustee):
+    """
+    Remove GenericAll (full control) rights from a trustee over a target object.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target object
+        trustee: sAMAccountName of the user to remove rights from
+    """
     _, trusteeSID = conn.ldap_get_user(trustee)
     targetDN, _ = conn.ldap_get_user(target)
 
@@ -195,7 +231,13 @@ def uac(conn, target: str, flags: list):
 
 
 def RBCD(conn, computer_name):
+    """
+    Clear Resource-Based Constrained Delegation (RBCD) configuration.
 
+    Args:
+        conn: LDAP connection object
+        computer_name: sAMAccountName of the computer to clear RBCD from
+    """
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(computer_name), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])
     if success is False or len(conn._ldap_connection.entries) != 1:
         logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
@@ -213,4 +255,152 @@ def RBCD(conn, computer_name):
         logging.info('Delegation rights cleared successfully!')
     except Exception as e:
         error_code = conn._ldap_connection.result['result']
-        check_error(conn, error_code, e) 
+        check_error(conn, error_code, e)
+
+
+def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str = None):
+    """
+    Remove a DNS record from Active Directory Integrated DNS.
+
+    Args:
+        conn: LDAP connection object
+        name: Hostname of the DNS record to remove
+        data: Optional record data to remove specific record (IP address, hostname, or text)
+        dnstype: Optional type of DNS record to remove (A, AAAA, CNAME, MX, PTR, SRV, TXT)
+        zone: DNS zone name (default: current domain)
+
+    Note:
+        - If data and dnstype are not specified, the entire DNS node will be deleted
+        - If data or dnstype is specified, only matching records will be removed
+    """
+    # Use current domain as zone if not specified
+    if zone is None:
+        zone = conn.domain
+
+    logging.info(f"[*] Removing DNS record: {name}.{zone}")
+
+    try:
+        # Build zone DN
+        naming_context = "," + conn._baseDN
+        zone_types = ["DomainDnsZones", "ForestDnsZones"]
+
+        record_dn = None
+        existing_records = None
+        zone_dn = None
+
+        # Try to find the record in different zone locations
+        for zone_type in zone_types:
+            zone_dn = f"DC={zone},CN=MicrosoftDNS,DC={zone_type}{naming_context}"
+            logging.debug(f"Trying zone: {zone_dn}")
+
+            try:
+                # Search for the DNS record
+                conn.search(
+                    search_base=zone_dn,
+                    search_filter=f"(name={name})",
+                    search_scope=ldap3.SUBTREE,
+                    attributes=["name", "dnsRecord", "distinguishedName"],
+                )
+
+                if not conn._ldap_connection.entries:
+                    logging.debug(f"Record not found in {zone_type}")
+                    continue
+
+                # Found the record
+                entry = conn._ldap_connection.entries[0]
+                record_dn = entry.distinguishedName.value
+                existing_records = entry["dnsRecord"].raw_values if "dnsRecord" in entry else []
+                logging.debug(f"Found existing record at: {record_dn}")
+                logging.debug(f"Found {len(existing_records)} DNS record(s)")
+                break
+
+            except Exception as e:
+                logging.debug(f"Error searching {zone_type}: {e}")
+                continue
+
+        if record_dn is None:
+            logging.error(f"[-] DNS record '{name}' not found in zone '{zone}'")
+            return
+
+        # If no specific data/type provided, delete the entire DNS node
+        if data is None and dnstype is None:
+            logging.debug(f"Deleting entire DNS node at {record_dn}")
+            try:
+                conn.delete(record_dn)
+                logging.info(f"[+] {name} has been successfully deleted")
+            except Exception as e:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+            return
+
+        # Parse existing records to find matches
+        records_to_keep = []
+        removed_count = 0
+
+        for record_bytes in existing_records:
+            try:
+                dns_record = DNSRecord(record_bytes)
+                record_dict = dns_record.to_dict()
+
+                # Determine if we should keep this record
+                should_keep = True
+
+                # Check dnstype match if specified
+                if dnstype is not None:
+                    record_type_code = DNS_RECORD_TYPE.get(dnstype.upper())
+                    if record_type_code is not None and dns_record.record_type != record_type_code:
+                        should_keep = True  # Different type, keep it
+                    elif record_type_code is not None and dns_record.record_type == record_type_code:
+                        # Same type, check data if provided
+                        if data is not None:
+                            # Parse record data to compare
+                            record_data_str = str(record_dict.get("data", ""))
+                            if data.lower() in record_data_str.lower():
+                                should_keep = False  # Match found, remove it
+                        else:
+                            should_keep = False  # Remove all of this type
+
+                # If only data is specified (no type), match by data content
+                elif data is not None:
+                    record_data_str = str(record_dict.get("data", ""))
+                    if data.lower() in record_data_str.lower():
+                        should_keep = False
+
+                if should_keep:
+                    records_to_keep.append(record_bytes)
+                else:
+                    removed_count += 1
+                    logging.debug(f"Removing record: type={record_dict.get('type')}, data={record_dict.get('data')}")
+
+            except Exception as e:
+                logging.debug(f"Error parsing DNS record: {e}")
+                # Keep unparseable records to avoid data loss
+                records_to_keep.append(record_bytes)
+
+        if removed_count == 0:
+            logging.error(f"[-] No matching DNS records found to remove")
+            return
+
+        # Update or delete based on remaining records
+        if len(records_to_keep) == 0:
+            # No records left, delete the entire DNS node
+            logging.debug(f"No records remaining, deleting DNS node at {record_dn}")
+            try:
+                conn.delete(record_dn)
+                logging.info(f"[+] All DNS records removed, {name} has been deleted")
+            except Exception as e:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+        else:
+            # Update with remaining records
+            logging.debug(f"Updating record with {len(records_to_keep)} remaining record(s)")
+            try:
+                conn.modify(record_dn, {"dnsRecord": [(MODIFY_REPLACE, records_to_keep)]})
+                logging.info(f"[+] Removed {removed_count} DNS record(s) from {name}")
+            except Exception as e:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+
+    except Exception as e:
+        logging.error(f"[-] Failed to remove DNS record: {e}")
+        raise 

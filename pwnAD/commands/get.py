@@ -15,21 +15,27 @@ from pwnAD.commands.query import query
 
 
 def users(conn):
+    """List all user accounts in the domain."""
     query(conn, "(objectClass=user)", "samaccountname", simple=True)
 
 def user(conn, account):
+    """Get all attributes for a specific user account."""
     query(conn, f"(&(objectClass=*)(samaccountname={account}))", "*")
 
 def computers(conn):
+    """List all computer accounts in the domain."""
     query(conn, "(objectCategory=Computer)", "samaccountname", simple=True)
 
 def DC(conn):
+    """List all Domain Controllers with their SPNs."""
     query(conn, "(&(objectCategory=Computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))", ["samaccountname", "serviceprincipalname"])
 
 def servers(conn):
+    """List all servers excluding Domain Controllers."""
     query(conn, "(&(objectCategory=computer)(operatingSystem=*server*)(!(userAccountControl:1.2.840.113556.1.4.803:=8192)))", "samaccountname", simple=True)
 
 def CA(conn):
+    """List all Certificate Authorities in the forest."""
     query(conn,
         search_base=f"CN=Enrollment Services,CN=Public Key Services,CN=Services,{conn.configuration_path}",
         search_filter="(&(objectClass=pKIEnrollmentService))",
@@ -45,51 +51,73 @@ def CA(conn):
     )
 
 def OU(conn):
+    """List all Organizational Units in the domain."""
     query(conn, "(objectCategory=organizationalUnit)", "distinguishedname", simple=True)
 
 def containers(conn):
+    """List all containers in the domain."""
     query(conn, "(objectCategory=container)", "distinguishedname", simple=True)
 
 def spn(conn):
+    """List all user accounts with Service Principal Names."""
     query(conn, "(&(objectClass=User)(serviceprincipalname=*)(samaccountname=*))", ["samaccountname", "serviceprincipalname"])
 
 def constrained_delegation(conn):
+    """List accounts configured for constrained delegation."""
     query(conn, "(&(objectClass=User)(msDS-AllowedToDelegateTo=*))", ["samaccountname", "serviceprincipalname", "msDS-AllowedToDelegateTo"])
 
 def unconstrained_delegation(conn):
+    """List accounts configured for unconstrained delegation."""
     query(conn, "(userAccountControl:1.2.840.113556.1.4.803:=524288)", ["samaccountname", "servicePrincipalName"])
 
 def not_trusted_for_delegation(conn):
+    """List accounts marked as NOT_DELEGATED."""
     query(conn, "(&(samaccountname=*)(userAccountControl:1.2.840.113556.1.4.803:=1048576))", "samaccountname", simple=True)
 
 def asreproastables(conn):
+    """List accounts vulnerable to AS-REP roasting (no Kerberos pre-auth required)."""
     query(conn, "(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))", "samaccountname", simple=True)
 
 def kerberoastables(conn):
+    """List accounts vulnerable to Kerberoasting (user accounts with SPNs)."""
     query(conn, "(&(samAccountType=805306368)(servicePrincipalName=*)(!(samAccountName=krbtgt))(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))", "samaccountname", simple=True)
 
 def password_not_required(conn):
+    """List accounts with PASSWORD_NOT_REQUIRED flag."""
     query(conn, "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))", "samaccountname", simple=True)
 
 def groups(conn):
+    """List all security and distribution groups."""
     query(conn, "(objectCategory=group)", "samaccountname", simple=True)
 
 def protected_users(conn):
+    """List members of Protected Users group."""
     query(conn, f"(&(objectCategory=CN=group,CN=Schema,CN=configuration,{conn._baseDN})(samaccountname=Protect*)(member=*))", "samaccountname", simple=True)
 
 def users_description(conn):
+    """List user descriptions (may contain passwords)."""
     query(conn, "(&(objectCategory=user)(description=*))", "description")
 
 def passwords_dont_expire(conn):
+    """List accounts with passwords set to never expire."""
     query(conn, "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=65536))", "samaccountname", simple=True)
 
 def users_with_admin_count(conn):
+    """List users with adminCount=1 (historically privileged accounts)."""
     query(conn, "(&(objectClass=user)(admincount=1)(!(samaccountname=krbtgt))(!(samaccountname=administrator)))", "samaccountname", simple=True)
 
 def accounts_with_sid_histoy(conn):
+    """List accounts with SID History attribute set."""
     query(conn, "(&(objectCategory=Person)(objectClass=User)(sidHistory=*))", "samaccountname", simple=True) 
 
 def members(conn, group):
+    """
+    List all members of a group including primary group members.
+
+    Args:
+        conn: LDAP connection object
+        group: sAMAccountName of the group
+    """
     results = query(conn, f"(&(objectClass=group)(samaccountname={group}))", ["distinguishedName", "objectSid"], raw=True)
     if not results:
         logging.error(f"The group {group} doesn't exist")
@@ -106,7 +134,14 @@ def members(conn, group):
 
 
 def membership(conn, account, recurse=False):
+    """
+    Get group membership for an account.
 
+    Args:
+        conn: LDAP connection object
+        account: sAMAccountName of the account
+        recurse: If True, get nested group membership (max depth 5)
+    """
     def get_recursive_groups(conn, account, max_depth, current_depth=1):
         nonlocal group_membership
 
@@ -160,6 +195,7 @@ def membership(conn, account, recurse=False):
 
 
 def RBCD(conn):
+    """List all accounts configured with Resource-Based Constrained Delegation."""
     rbcd_results = query(conn, "(msDS-AllowedToActOnBehalfOfOtherIdentity=*)", "samaccountname", simple=True, do_print=False)
     for computer in rbcd_results:
         DN_delegate_to = conn.get_dn_from_samaccountname(samaccountname=computer, object_class="computer")
@@ -197,6 +233,13 @@ def RBCD(conn):
 
 
 def owner(conn, target: str):
+    """
+    Get the owner of a target object from its security descriptor.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target object
+    """
     target_dn, _ = conn.ldap_get_user(target)
     controls = security_descriptor_control(sdflags=0x01)
     conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'], controls=controls)
@@ -219,6 +262,7 @@ def owner(conn, target: str):
     logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
 
 def machine_quota(conn):
+    """Get the machine account quota (number of computers a user can join to domain)."""
     conn.search(search_base=conn._baseDN, search_filter="(objectClass=*)", attributes=["ms-DS-MachineAccountQuota"])
     try:
         maq = conn._ldap_connection.entries[0]["ms-DS-MachineAccountQuota"]
@@ -227,6 +271,7 @@ def machine_quota(conn):
         logging.error("MachineAccountQuota: <not set>")
 
 def laps(conn):
+    """Retrieve LAPS (Local Administrator Password Solution) passwords for computers."""
     try:
         conn.search(search_base=conn._baseDN, search_filter='(&(objectCategory=computer)(ms-MCS-AdmPwd=*))', attributes=["ms-Mcs-AdmPwd","SAMAccountname"])
         results = conn._ldap_connection.entries
@@ -244,6 +289,12 @@ def laps(conn):
             check_error(conn, error_code, e)
 
 def gmsa(conn):
+    """
+    Retrieve Group Managed Service Account (gMSA) passwords and compute hashes.
+
+    Note:
+        Requires TLS connection for security. Displays NT hash and AES keys.
+    """
     # code inspired from micahvandeusen's gMSADumper https://github.com/micahvandeusen/gMSADumper
     if conn._do_tls == False:
         logging.error("GMSA passwords can only be retrived through a secure connection.")

