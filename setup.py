@@ -16,7 +16,7 @@ setup(
         "cryptography>=39.0",
         "impacket",
         #"ldap3-bleeding-edge",
-        "ldap3==2.10.2.rc0",
+        "ldap3==2.10.2rc3",
         "pyasn1==0.4.8",
         "dsinternals",
     ],

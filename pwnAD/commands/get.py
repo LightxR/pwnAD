@@ -306,12 +306,12 @@ def gmsa(conn):
                 logging.error(f"An error occured while trying to start a TLS connection : {e}")
         else:
             return
-    
+
     try :
         conn.search(
-            search_base=conn._baseDN, 
-            search_filter='(&(ObjectClass=msDS-GroupManagedServiceAccount))', 
-            search_scope=SUBTREE, 
+            search_base=conn._baseDN,
+            search_filter='(&(ObjectClass=msDS-GroupManagedServiceAccount))',
+            search_scope=SUBTREE,
             attributes=['sAMAccountName','msDS-ManagedPassword','msDS-GroupMSAMembership']
             )
 
@@ -323,7 +323,7 @@ def gmsa(conn):
             logging.info(f'Users or groups who can read password for {sam}:')
             for dacl in SR_SECURITY_DESCRIPTOR(data=entry['msDS-GroupMSAMembership'].raw_values[0])['Dacl']['Data']:
                 conn.search(conn._baseDN, '(&(objectSID='+dacl['Ace']['Sid'].formatCanonical()+'))', attributes=['sAMAccountName'])
-                
+
                 # Added this check to prevent an error from occuring when there are no results returned
                 if len(conn._ldap_connection.entries) != 0:
                     logging.info(conn._ldap_connection.entries[0]['sAMAccountName'].value)
@@ -353,4 +353,196 @@ def gmsa(conn):
         logging.error(f"An error occured while trying to retreive GMSA passwords : {e}")
 
 
-    
+def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exclude_deleted=False):
+    """
+    Retrieve objects writable by the current authenticated user.
+
+    This function identifies directory objects that the authenticated user can modify based on effective permissions.
+    It uses Active Directory's computed attributes (allowedAttributesEffective, allowedChildClassesEffective,
+    sDRightsEffective) to determine actual write permissions.
+
+    Args:
+        conn: LDAP connection object
+        otype: Object class filter. Special keywords:
+               - "useronly": Only user accounts (sAMAccountType=805306368)
+               - "ou": Organizational Units and Containers
+               - "gpo": Group Policy Objects
+               - "*": All objects (default)
+               - Or any valid objectClass name
+        right: Type of right to search for:
+               - "ALL": Search for all rights (WRITE + CHILD) (default)
+               - "WRITE": Only objects where attributes can be written
+               - "CHILD": Only objects where child objects can be created
+        detail: If True, displays specific writable attributes and child classes
+        partition: Directory partition to explore:
+                   - "DOMAIN": Domain naming context (default)
+                   - "CONFIGURATION": Configuration naming context
+                   - "SCHEMA": Schema naming context
+                   - "ALL": All naming contexts
+        exclude_deleted: If True, exclude deleted objects from results
+
+    Returns:
+        None (prints results to console)
+
+    Example:
+        writable(conn, otype="user", right="WRITE", detail=True)
+        writable(conn, otype="ou", partition="ALL")
+    """
+    # Build LDAP filter based on object type
+    if otype == "useronly":
+        ldap_filter = "(sAMAccountType=805306368)"
+    elif otype == "ou":
+        ldap_filter = "(|(objectClass=container)(objectClass=organizationalUnit))"
+    elif otype == "gpo":
+        ldap_filter = "(objectClass=groupPolicyContainer)"
+    else:
+        ldap_filter = f"(objectClass={otype})"
+
+    # Determine which attributes to retrieve
+    attributes = ['distinguishedName']
+
+    if right in ["WRITE", "ALL"]:
+        attributes.extend(['allowedAttributesEffective', 'sDRightsEffective'])
+
+    if right in ["CHILD", "ALL"]:
+        attributes.append('allowedChildClassesEffective')
+
+    # Determine search bases based on partition
+    search_bases = []
+    if partition == "DOMAIN":
+        search_bases.append(conn._baseDN)
+    elif partition == "CONFIGURATION":
+        search_bases.append(conn.configuration_path)
+    elif partition == "SCHEMA":
+        search_bases.append(f"CN=Schema,{conn.configuration_path}")
+    elif partition == "ALL":
+        search_bases.extend([
+            conn._baseDN,
+            conn.configuration_path,
+            f"CN=Schema,{conn.configuration_path}"
+        ])
+
+    # Set up LDAP controls
+    controls = []
+    if not exclude_deleted:
+        # Include deleted objects (tombstones) by setting the LDAP_SERVER_SHOW_DELETED_OID control
+        from ldap3.protocol.microsoft import extended_dn_control
+        try:
+            # Show deleted objects control
+            show_deleted_control = ('1.2.840.113556.1.4.417', True, None)
+            controls.append(show_deleted_control)
+        except Exception:
+            pass
+
+    # Helper function to interpret sDRightsEffective
+    def parse_sd_rights(sd_rights_value):
+        """
+        Parse sDRightsEffective value to determine SD modification rights.
+
+        Bit flags:
+        - 0x01: OWNER (can modify owner)
+        - 0x04: DACL (can modify DACL)
+        - 0x08: SACL (can modify SACL)
+        """
+        rights = {}
+        if not sd_rights_value:
+            return rights
+
+        try:
+            value = int(sd_rights_value)
+            if value & 0x01:
+                rights["OWNER"] = "WRITE"
+            if value & 0x04:
+                rights["DACL"] = "WRITE"
+            if value & 0x08:
+                rights["SACL"] = "WRITE"
+        except (ValueError, TypeError):
+            pass
+
+        return rights
+
+    # Search for writable objects
+    writable_objects_count = 0
+
+    for search_base in search_bases:
+        try:
+            logging.info(f"Searching for writable objects in {search_base}...")
+
+            conn.search(
+                search_base=search_base,
+                search_filter=ldap_filter,
+                search_scope=SUBTREE,
+                attributes=attributes,
+                controls=controls if controls else None
+            )
+
+            entries = conn._ldap_connection.entries
+
+            for entry in entries:
+                has_write_permission = False
+                permissions = []
+                sd_rights_info = {}
+                detail_info = []
+
+                # Check for attribute write permissions
+                if right in ["WRITE", "ALL"]:
+                    if 'allowedAttributesEffective' in entry:
+                        allowed_attrs = entry['allowedAttributesEffective'].value
+                        if allowed_attrs:
+                            has_write_permission = True
+                            permissions.append("WRITE")
+                            if detail:
+                                if isinstance(allowed_attrs, list):
+                                    detail_info.append(f"Writable attributes ({len(allowed_attrs)}): {', '.join(allowed_attrs[:5])}" +
+                                                      (" ..." if len(allowed_attrs) > 5 else ""))
+                                else:
+                                    detail_info.append(f"Writable attributes: {allowed_attrs}")
+
+                    # Check for Security Descriptor write permissions
+                    if 'sDRightsEffective' in entry:
+                        sd_rights = entry['sDRightsEffective'].value
+                        if sd_rights:
+                            sd_rights_info = parse_sd_rights(sd_rights)
+                            if sd_rights_info:
+                                has_write_permission = True
+
+                # Check for child creation permissions
+                if right in ["CHILD", "ALL"]:
+                    if 'allowedChildClassesEffective' in entry:
+                        allowed_child_classes = entry['allowedChildClassesEffective'].value
+                        if allowed_child_classes:
+                            has_write_permission = True
+                            permissions.append("CREATE_CHILD")
+                            if detail:
+                                if isinstance(allowed_child_classes, list):
+                                    detail_info.append(f"Creatable child classes ({len(allowed_child_classes)}): {', '.join(allowed_child_classes[:5])}" +
+                                                      (" ..." if len(allowed_child_classes) > 5 else ""))
+                                else:
+                                    detail_info.append(f"Creatable child classes: {allowed_child_classes}")
+
+                # Display if object has write permissions
+                if has_write_permission:
+                    writable_objects_count += 1
+                    dn = entry.distinguishedName.value if hasattr(entry.distinguishedName, 'value') else str(entry.distinguishedName)
+
+                    print(f"\ndistinguishedName: {dn}")
+                    if permissions:
+                        print(f"permission: {'; '.join(permissions)}")
+                    for sd_type, sd_perm in sd_rights_info.items():
+                        print(f"{sd_type}: {sd_perm}")
+                    if detail:
+                        for info in detail_info:
+                            print(f"  {info}")
+
+        except ldap3.core.exceptions.LDAPException as e:
+            logging.error(f"Error searching {search_base}: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error searching {search_base}: {e}")
+
+    # Summary
+    if writable_objects_count == 0:
+        logging.info("No writable objects found")
+    else:
+        logging.info(f"Total writable objects found: {writable_objects_count}")
+
+

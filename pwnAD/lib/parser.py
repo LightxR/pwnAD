@@ -225,6 +225,14 @@ def get_parser(interactive=False):
     get_gmsa_parser = get_subparsers.add_parser('gmsa', help="Retreive gmsa passwords")
     all_subparsers.append(get_gmsa_parser)
 
+    get_writable_parser = get_subparsers.add_parser('writable', help="Retrieve objects writable by the current user")
+    get_writable_parser.add_argument("--otype", dest="otype", action="store", default="*", help="Object class filter (e.g., user, computer, group, ou, gpo, or *)")
+    get_writable_parser.add_argument("--right", dest="right", action="store", choices=["ALL", "WRITE", "CHILD"], default="ALL", help="Type of right to search (default: ALL)")
+    get_writable_parser.add_argument("--detail", dest="detail", action="store_true", help="Display writable attributes and child classes")
+    get_writable_parser.add_argument("--partition", dest="partition", action="store", choices=["DOMAIN", "CONFIGURATION", "SCHEMA", "ALL"], default="DOMAIN", help="Directory partition to explore (default: DOMAIN)")
+    get_writable_parser.add_argument("--exclude-deleted", dest="exclude_deleted", action="store_true", help="Exclude deleted objects from results")
+    all_subparsers.append(get_writable_parser)
+
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
     modify_subparsers = parser_modify.add_subparsers(dest="function", help="LDAP functions")
@@ -299,6 +307,53 @@ def get_parser(interactive=False):
     shadow_info_parser.add_argument("device_id", action="store", help="Device ID of the Key Credential Link")
     all_subparsers.append(shadow_info_parser)
 
+
+    # DACL action
+    parser_dacl = subparsers.add_parser('dacl', help='Perform DACL manipulation (read, write, remove, backup, restore)')
+    dacl_subparsers = parser_dacl.add_subparsers(dest="function", help="DACL functions")
+    all_subparsers.append(parser_dacl)
+
+    # Available rights for --right argument
+    dacl_rights_choices = [
+        "FullControl", "GenericAll", "GenericWrite", "WriteDacl", "WriteOwner",
+        "AllExtendedRights", "DCSync", "WriteMembers", "AddMember", "ResetPassword",
+        "Self", "ReadGMSAPassword", "ReadLAPSPassword", "WriteKeyCredentialLink", "WriteSPN"
+    ]
+
+    # DACL read - Read DACL of an object
+    dacl_read_parser = dacl_subparsers.add_parser('read', help="Read and display the DACL of an object")
+    dacl_read_parser.add_argument("target", action="store", help="Target object (sAMAccountName, SID, or DN)")
+    dacl_read_parser.add_argument("--principal", action="store", help="Filter ACEs by principal (sAMAccountName or SID)")
+    dacl_read_parser.add_argument("--resolve-sids", dest="resolve_sids", action="store_true", help="Resolve SIDs to sAMAccountNames")
+    all_subparsers.append(dacl_read_parser)
+
+    # DACL write - Add an ACE to the DACL
+    dacl_write_parser = dacl_subparsers.add_parser('write', help="Add an ACE to the DACL of an object")
+    dacl_write_parser.add_argument("target", action="store", help="Target object (sAMAccountName, SID, or DN)")
+    dacl_write_parser.add_argument("--principal", required=True, action="store", help="Principal to grant/deny rights (sAMAccountName or SID)")
+    dacl_write_parser.add_argument("--right", required=True, action="store", choices=dacl_rights_choices, help="Right to grant/deny")
+    dacl_write_parser.add_argument("--ace-type", dest="ace_type", action="store", choices=["allowed", "denied"], default="allowed", help="ACE type (default: allowed)")
+    dacl_write_parser.add_argument("--inheritance", action="store_true", help="Set inheritance flags on the ACE")
+    all_subparsers.append(dacl_write_parser)
+
+    # DACL remove - Remove ACEs from the DACL
+    dacl_remove_parser = dacl_subparsers.add_parser('remove', help="Remove ACEs from the DACL of an object")
+    dacl_remove_parser.add_argument("target", action="store", help="Target object (sAMAccountName, SID, or DN)")
+    dacl_remove_parser.add_argument("--principal", required=True, action="store", help="Principal whose ACEs to remove (sAMAccountName or SID)")
+    dacl_remove_parser.add_argument("--right", action="store", choices=dacl_rights_choices, help="Specific right to remove (removes all if not specified)")
+    dacl_remove_parser.add_argument("--ace-type", dest="ace_type", action="store", choices=["allowed", "denied"], help="Filter by ACE type")
+    all_subparsers.append(dacl_remove_parser)
+
+    # DACL backup - Backup the DACL to a JSON file
+    dacl_backup_parser = dacl_subparsers.add_parser('backup', help="Backup the DACL of an object to a JSON file")
+    dacl_backup_parser.add_argument("target", action="store", help="Target object (sAMAccountName, SID, or DN)")
+    dacl_backup_parser.add_argument("--output", "-o", action="store", help="Output file path (default: <target>_dacl_backup.json)")
+    all_subparsers.append(dacl_backup_parser)
+
+    # DACL restore - Restore the DACL from a JSON file
+    dacl_restore_parser = dacl_subparsers.add_parser('restore', help="Restore the DACL of an object from a JSON backup file")
+    dacl_restore_parser.add_argument("backup_file", action="store", help="Path to the backup JSON file")
+    all_subparsers.append(dacl_restore_parser)
 
 
     # getTGT action
