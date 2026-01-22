@@ -10,6 +10,12 @@ from typing import Any, List, Union
 
 from pwnAD.lib.certificate import key_to_pem, cert_to_pem, load_pfx, rsa, x509
 
+
+class LDAPAuthenticationError(Exception):
+    """Raised when LDAP authentication fails"""
+    pass
+
+
 # Kerberos auth
 from pyasn1.codec.ber import encoder, decoder
 from pyasn1.type.univ import noValue        
@@ -120,7 +126,7 @@ class LDAPConnection:
 
                 if self._do_tls:
                     logging.critical('TLS negociation failed, this error is mostly due to your host not supporting SHA1 as signing algorithm for certificates')
-                sys.exit(-1)
+                raise LDAPAuthenticationError(str(e))
 
         except ldap3.core.exceptions.LDAPInvalidCredentialsResult:
                 logging.warning('Server returns LDAPInvalidCredentialsResult')
@@ -131,7 +137,7 @@ class LDAPConnection:
                         logging.critical('Server requires Channel Binding Token and your ldap3 install does not support it. '
                                                 'Please install https://github.com/cannatag/ldap3/pull/1087, try another authentication method, '
                                                 'or use a password, not a hash, to authenticate.')
-                        sys.exit(-1)
+                        raise LDAPAuthenticationError('Server requires Channel Binding Token not supported with hash authentication')
                     
                     else:
                         logging.debug('Server requires Channel Binding Token but you are using password authentication,'
@@ -146,7 +152,7 @@ class LDAPConnection:
                 
                 else:
                     logging.critical('Invalid Credentials')
-                    sys.exit(-1)
+                    raise LDAPAuthenticationError('Invalid Credentials')
 
         except ldap3.core.exceptions.LDAPStrongerAuthRequiredResult:
             logging.warning('Server returns LDAPStrongerAuthRequiredResult')
@@ -162,6 +168,8 @@ class LDAPConnection:
 
         except Exception as e:
             logging.info(f"Couldn't connect to LDAP server.\n{e}")
+            raise
+
         who_am_i = ldap_connection.extend.standard.who_am_i()
         logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
 
@@ -287,7 +295,7 @@ class LDAPConnection:
         response = ldap_connection.post_send_single_response(ldap_connection.send('bindRequest', request, None))
         ldap_connection.sasl_in_progress = False
         if response[0]['result'] != 0:
-            raise Exception(response)
+            raise LDAPAuthenticationError(f"Kerberos bind failed: {response}")
 
         ldap_connection.bound = True
         ldap_connection.raise_exceptions = True
@@ -296,7 +304,7 @@ class LDAPConnection:
 
         if not who_am_i:
             logging.critical('Kerberos authentication failed')
-            sys.exit(-1)
+            raise LDAPAuthenticationError('Kerberos authentication failed')
         logging.debug(f"Successfully connected to the LDAP as {who_am_i}")
 
         self._ldap_server = ldap_server
@@ -355,7 +363,10 @@ class LDAPConnection:
         who_am_i = ldap_connection.extend.standard.who_am_i()
         if not who_am_i:
             logging.critical('Certificate authentication failed')
-            sys.exit(-1)
+            if self.pfx:
+                os.unlink(key_file.name)
+                os.unlink(cert_file.name)
+            raise LDAPAuthenticationError('Certificate authentication failed')
 
         logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
         self._ldap_server = ldap_server
@@ -383,10 +394,10 @@ class LDAPConnection:
                 if self._do_tls:
                     logging.critical('TLS negociation failed, this error is mostly due to your host '
                                           'not supporting SHA1 as signing algorithm for certificates')
-                sys.exit(-1)
+                raise LDAPAuthenticationError(str(e))
         except ldap3.core.exceptions.LDAPInvalidCredentialsResult as e:
             logging.critical('Invalid Credentials')
-            sys.exit(-1)
+            raise LDAPAuthenticationError('Invalid Credentials')
 
         who_am_i = ldap_connection.extend.standard.who_am_i()
         logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
@@ -605,7 +616,7 @@ class LDAPConnection:
 
         except Exception:
             logging.error("Error trying to bind anonymously, please define domain name with -d option")
-            sys.exit(-1)
+            raise LDAPAuthenticationError("Failed to retrieve domain info via anonymous bind")
         
 
 

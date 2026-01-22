@@ -668,3 +668,84 @@ def object(conn, target: str, attr: str = "*", resolve_sd: bool = False, raw: bo
     except Exception as e:
         logging.error(f"Error retrieving object: {e}")
 
+
+def attribute(conn, target: str, attr: str, raw: bool = False):
+    """
+    Retrieve a specific attribute value from any LDAP object.
+
+    This function provides a simple way to get one or more attribute values
+    from an AD object, supporting multiple target identification formats.
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+        attr: Comma-separated list of attributes to retrieve
+        raw: If True, display raw values without formatting (default: False)
+
+    Example:
+        get attribute Administrator description
+        get attribute user1 memberOf,primaryGroupID
+        get attribute DC01$ servicePrincipalName
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    # Parse attributes
+    attributes = [a.strip() for a in attr.split(",")]
+
+    try:
+        conn._ldap_connection.search(
+            search_base=target_dn,
+            search_filter="(objectClass=*)",
+            search_scope=BASE,
+            attributes=attributes
+        )
+
+        if not conn._ldap_connection.entries:
+            logging.error(f"Object not found: {target}")
+            return
+
+        entry = conn._ldap_connection.entries[0]
+
+        # Display results
+        for attr_name in attributes:
+            if attr_name not in entry.entry_attributes:
+                logging.info(f"{attr_name}: <not set>")
+                continue
+
+            attr_value = entry[attr_name]
+
+            # Handle raw values
+            if raw:
+                if hasattr(attr_value, 'raw_values'):
+                    values = attr_value.raw_values
+                else:
+                    values = [attr_value.value]
+            else:
+                if hasattr(attr_value, 'values'):
+                    values = attr_value.values if attr_value.values else [attr_value.value]
+                else:
+                    values = [attr_value.value]
+
+            # Format output
+            if values is None:
+                logging.info(f"{attr_name}: <not set>")
+            elif isinstance(values, list):
+                if len(values) == 0:
+                    logging.info(f"{attr_name}: <empty>")
+                elif len(values) == 1:
+                    print(f"{attr_name}: {values[0]}")
+                else:
+                    print(f"{attr_name}:")
+                    for v in values:
+                        print(f"  {v}")
+            else:
+                print(f"{attr_name}: {values}")
+
+    except ldap3.core.exceptions.LDAPException as e:
+        logging.error(f"LDAP error: {e}")
+    except Exception as e:
+        logging.error(f"Error retrieving attribute: {e}")
+

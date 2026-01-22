@@ -267,6 +267,12 @@ def get_parser(interactive=False):
     get_object_parser.add_argument("--raw", dest="raw", action="store_true", help="Display raw attribute values")
     all_subparsers.append(get_object_parser)
 
+    get_attribute_parser = get_subparsers.add_parser('attribute', help="Retrieve specific attribute(s) from any LDAP object")
+    get_attribute_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
+    get_attribute_parser.add_argument("attr", action="store", help="Comma-separated list of attributes to retrieve")
+    get_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Display raw attribute values")
+    all_subparsers.append(get_attribute_parser)
+
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
     modify_subparsers = parser_modify.add_subparsers(dest="function", help="LDAP functions")

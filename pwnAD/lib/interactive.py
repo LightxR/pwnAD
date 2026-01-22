@@ -6,7 +6,7 @@ import sys
 
 import pwnAD.lib.parser as parser
 from pwnAD.lib.auth import Authenticate
-from pwnAD.lib.ldap import LDAPConnection
+from pwnAD.lib.ldap import LDAPConnection, LDAPAuthenticationError
 from pwnAD.lib.utils import execute_action_function, Completer
 from pwnAD.lib.version import BANNER
 
@@ -66,6 +66,7 @@ def start_interactive_mode(conn):
                 continue
 
             elif command == "rebind":
+                backup_conn = conn
                 try:
                     if conn._ldap_connection.bound:
                         logging.debug("Connection already bound")
@@ -96,19 +97,23 @@ def start_interactive_mode(conn):
                         new_conn.connect()
                         conn = new_conn
                         logging.info("Successfully performed a connection rebind.")
-                    except:
-                        logging.error(f"An error occurred when trying to rebind connection : {e}")
+                    except (LDAPAuthenticationError, Exception) as rebind_error:
+                        logging.error(f"An error occurred when trying to rebind connection: {rebind_error}")
+                        conn = backup_conn
                 continue
 
             elif command == "switch_user":
                 args = interactive_parser.parse_args([command] + arguments)
-                
+
                 domain = conn.domain if args.domain == None else args.domain
                 dc_ip = conn.target if args.dc_ip == None else args.dc_ip
 
-                if not args.username and not (args.password or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
+                if not args.username or not (args.password or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
                     logging.error("You need to provide at least a username and secret to perform switching operation")
                     continue
+
+                # Backup current connection before attempting switch
+                backup_conn = conn
 
                 try:
                     authenticate = Authenticate(
@@ -127,13 +132,27 @@ def start_interactive_mode(conn):
                         _do_tls=args._do_tls,
                         port=args.port
                         )
-                        
-                    conn = authenticate.ldap_authentication()
+
+                    new_conn = authenticate.ldap_authentication()
+
+                    # Verify the connection is properly bound before accepting it
+                    if new_conn._ldap_connection is None or not new_conn._ldap_connection.bound:
+                        raise LDAPAuthenticationError("Connection established but LDAP bind failed")
+
+                    conn = new_conn
                     logging.info(f"Successfully switched user to {args.username}.")
                 except ValueError as e:
                     logging.error(f"Authentication failed: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
+                except LDAPAuthenticationError as e:
+                    logging.error(f"Authentication failed: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
                 except Exception as e:
-                    logging.error(f"An error occurred when trying to switch user : {e}")
+                    logging.error(f"An error occurred when trying to switch user: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
                 continue
 
 
