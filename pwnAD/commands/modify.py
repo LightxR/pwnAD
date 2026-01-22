@@ -9,7 +9,7 @@ from ldap3.utils.conv import escape_filter_chars
 from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.protocol.formatters.formatters import format_sid
 
-from pwnAD.lib.utils import check_error
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
 
 
 def password(conn, account, new_password):
@@ -187,7 +187,7 @@ def _toggle_account_enable_disable(conn, user_name, enable):
     entry = conn._ldap_connection.entries[0]
     userAccountControl = entry["userAccountControl"].value
 
-    logging.info("Original userAccountControl: %d" % userAccountControl) 
+    logging.info("Original userAccountControl: %d" % userAccountControl)
 
     if enable:
         userAccountControl = userAccountControl & ~UF_ACCOUNT_DISABLE
@@ -200,3 +200,49 @@ def _toggle_account_enable_disable(conn, user_name, enable):
     except Exception as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
+
+
+def attribute(conn, target: str, attr: str, values: list, raw: bool = False, b64: bool = False):
+    """
+    Replace/set an attribute value on any LDAP object.
+
+    This function provides generic replace/set capability for any AD object's attributes,
+    supporting multiple target identification formats (sAMAccountName, DN, SID).
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+        attr: Name of the attribute to modify
+        values: List of values to set
+        raw: If True, send values as-is without encoding (default: False)
+        b64: If True, decode values from base64 first (default: False)
+
+    Example:
+        modify attribute user1 description "New description"
+        modify attribute user1 userAccountControl 514
+        modify attribute computer1$ servicePrincipalName HTTP/server.domain.local
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    # Encode values
+    encoded_values = []
+    for value in values:
+        encoded_value = encode_ldap_value(attr, value, raw=raw, b64=b64)
+        if encoded_value is None:
+            logging.error(f"Failed to encode value: {value}")
+            return
+        encoded_values.append(encoded_value)
+
+    # Perform the modification
+    try:
+        logging.debug(f"Replacing {target_dn}: {attr} = {encoded_values}")
+        conn.modify(target_dn, {attr: [(ldap3.MODIFY_REPLACE, encoded_values)]})
+        logging.info(f"Successfully set attribute '{attr}' on {target}")
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+    except Exception as e:
+        logging.error(f"Error modifying object: {e}")

@@ -10,7 +10,7 @@ from ldap3.utils.conv import escape_filter_chars
 from ldap3.protocol.microsoft import security_descriptor_control
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import check_error
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_serial
 
 
@@ -359,6 +359,7 @@ def uac(conn, target: str, flags: list):
 
 def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, ttl: int = 300, preference: int = 10, priority: int = 0, weight: int = 100, srvport: int = 80):
     """
+    Based on bloodyAD code.
     Add a DNS record to Active Directory Integrated DNS.
 
     Args:
@@ -493,3 +494,48 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
     except Exception as e:
         logging.error(f"[-] Failed to add DNS record: {e}")
         raise
+
+
+def attribute(conn, target: str, attr: str, values: list, raw: bool = False, b64: bool = False):
+    """
+    Add values to an attribute of any LDAP object.
+
+    This function adds values to a multi-valued attribute without removing
+    existing values. Supports multiple target identification formats.
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+        attr: Name of the attribute to add values to
+        values: List of values to add
+        raw: If True, send values as-is without encoding (default: False)
+        b64: If True, decode values from base64 first (default: False)
+
+    Example:
+        add attribute user1 servicePrincipalName MSSQLSvc/server:1433
+        add attribute computer1$ servicePrincipalName HTTP/server.domain.local
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    # Encode values
+    encoded_values = []
+    for value in values:
+        encoded_value = encode_ldap_value(attr, value, raw=raw, b64=b64)
+        if encoded_value is None:
+            logging.error(f"Failed to encode value: {value}")
+            return
+        encoded_values.append(encoded_value)
+
+    # Perform the modification
+    try:
+        logging.debug(f"Adding to {target_dn}: {attr} += {encoded_values}")
+        conn.modify(target_dn, {attr: [(MODIFY_ADD, encoded_values)]})
+        logging.info(f"Successfully added value(s) to attribute '{attr}' on {target}")
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+    except Exception as e:
+        logging.error(f"Error adding attribute value: {e}")

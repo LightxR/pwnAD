@@ -92,6 +92,14 @@ def get_parser(interactive=False):
     add_uac_parser.add_argument("-f", "--flag", dest="flags", action="append", required=True, metavar="FLAG", help="UAC flag to add (can be specified multiple times, e.g. -f DONT_REQ_PREAUTH -f TRUSTED_FOR_DELEGATION)")
     all_subparsers.append(add_uac_parser)
 
+    add_attribute_parser = add_subparsers.add_parser('attribute', help="Add values to an attribute of any LDAP object")
+    add_attribute_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
+    add_attribute_parser.add_argument("attr", action="store", help="Attribute name to add values to")
+    add_attribute_parser.add_argument("values", nargs="+", action="store", help="Value(s) to add")
+    add_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Send values as-is without encoding")
+    add_attribute_parser.add_argument("--b64", dest="b64", action="store_true", help="Decode values from base64")
+    all_subparsers.append(add_attribute_parser)
+
 
     # REMOVE action
     parser_remove = subparsers.add_parser('remove', help='Perform REMOVE related actions')
@@ -129,6 +137,25 @@ def get_parser(interactive=False):
     remove_uac_parser.add_argument("target", action="store", help="sAMAccountName of the target user/computer")
     remove_uac_parser.add_argument("-f", "--flag", dest="flags", action="append", required=True, metavar="FLAG", help="UAC flag to remove (can be specified multiple times, e.g. -f DONT_REQ_PREAUTH -f TRUSTED_FOR_DELEGATION)")
     all_subparsers.append(remove_uac_parser)
+
+    remove_dnsrecord_parser = remove_subparsers.add_parser('dnsRecord', help="Remove a DNS record from Active Directory Integrated DNS")
+    remove_dnsrecord_parser.add_argument("name", action="store", help="Hostname of the DNS record to remove")
+    remove_dnsrecord_parser.add_argument("--data", dest="data", action="store", default=None, help="Record data to remove specific record (IP, hostname, text)")
+    remove_dnsrecord_parser.add_argument("--dnstype", dest="dnstype", action="store", default=None, choices=["A", "AAAA", "CNAME", "MX", "PTR", "SRV", "TXT"], help="Type of DNS record to remove")
+    remove_dnsrecord_parser.add_argument("--zone", dest="zone", action="store", default=None, help="DNS zone name (default: current domain)")
+    all_subparsers.append(remove_dnsrecord_parser)
+
+    remove_attribute_parser = remove_subparsers.add_parser('attribute', help="Remove values from an attribute or clear it entirely")
+    remove_attribute_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
+    remove_attribute_parser.add_argument("attr", action="store", help="Attribute name to remove values from")
+    remove_attribute_parser.add_argument("values", nargs="*", action="store", help="Value(s) to remove. If not specified, clears the entire attribute")
+    remove_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Send values as-is without encoding")
+    remove_attribute_parser.add_argument("--b64", dest="b64", action="store_true", help="Decode values from base64")
+    all_subparsers.append(remove_attribute_parser)
+
+    remove_object_parser = remove_subparsers.add_parser('object', help="Delete an entire LDAP object")
+    remove_object_parser.add_argument("target", action="store", help="Target object to delete (sAMAccountName, DN, or SID)")
+    all_subparsers.append(remove_object_parser)
 
     # GET action
     parser_get = subparsers.add_parser('get', help='Perform GET related actions')
@@ -233,6 +260,13 @@ def get_parser(interactive=False):
     get_writable_parser.add_argument("--exclude-deleted", dest="exclude_deleted", action="store_true", help="Exclude deleted objects from results")
     all_subparsers.append(get_writable_parser)
 
+    get_object_parser = get_subparsers.add_parser('object', help="Retrieve attributes of any LDAP object")
+    get_object_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
+    get_object_parser.add_argument("--attr", dest="attr", action="store", default="*", help="Comma-separated list of attributes to retrieve (default: *)")
+    get_object_parser.add_argument("--resolve-sd", dest="resolve_sd", action="store_true", help="Resolve security descriptors to readable format")
+    get_object_parser.add_argument("--raw", dest="raw", action="store_true", help="Display raw attribute values")
+    all_subparsers.append(get_object_parser)
+
     # MODIFY action
     parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
     modify_subparsers = parser_modify.add_subparsers(dest="function", help="LDAP functions")
@@ -266,6 +300,14 @@ def get_parser(interactive=False):
     modify_enable_account_parser = modify_subparsers.add_parser('enable_account', help="Enable the targeted account")
     modify_enable_account_parser.add_argument("username", action="store", help="Account to be enabled")
     all_subparsers.append(modify_enable_account_parser)
+
+    modify_attribute_parser = modify_subparsers.add_parser('attribute', help="Replace/set an attribute value on any LDAP object")
+    modify_attribute_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
+    modify_attribute_parser.add_argument("attr", action="store", help="Attribute name to modify")
+    modify_attribute_parser.add_argument("values", nargs="+", action="store", help="Value(s) to set")
+    modify_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Send values as-is without encoding")
+    modify_attribute_parser.add_argument("--b64", dest="b64", action="store_true", help="Decode values from base64")
+    all_subparsers.append(modify_attribute_parser)
 
 
     # QUERY action

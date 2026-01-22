@@ -9,7 +9,7 @@ import ldap3
 import logging
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import format_list_results, check_error
+from pwnAD.lib.utils import format_list_results, check_error, resolve_target
 from pwnAD.lib.gmsa import MSDS_MANAGEDPASSWORD_BLOB
 from pwnAD.commands.query import query
 
@@ -355,6 +355,7 @@ def gmsa(conn):
 
 def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exclude_deleted=False):
     """
+    Based on bloodyAD code.
     Retrieve objects writable by the current authenticated user.
 
     This function identifies directory objects that the authenticated user can modify based on effective permissions.
@@ -545,4 +546,125 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
     else:
         logging.info(f"Total writable objects found: {writable_objects_count}")
 
+
+def object(conn, target: str, attr: str = "*", resolve_sd: bool = False, raw: bool = False):
+    """
+    Retrieve attributes of any LDAP object.
+
+    This function provides generic access to any AD object's attributes,
+    supporting multiple target identification formats (sAMAccountName, DN, SID).
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+        attr: Comma-separated list of attributes to retrieve (default: "*" for all)
+        resolve_sd: If True, resolve security descriptors to SDDL format (default: False)
+        raw: If True, display raw values without formatting (default: False)
+
+    Example:
+        get object Administrator
+        get object Administrator --attr sAMAccountName,memberOf
+        get object S-1-5-21-xxx-500
+        get object "CN=Admin,CN=Users,DC=corp,DC=local" --resolve-sd
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    # Parse attributes
+    if attr == "*":
+        attributes = ["*"]
+    else:
+        attributes = [a.strip() for a in attr.split(",")]
+
+    # Add nTSecurityDescriptor if resolve_sd is requested
+    if resolve_sd and "nTSecurityDescriptor" not in attributes and "*" not in attributes:
+        attributes.append("nTSecurityDescriptor")
+
+    # Set up controls for security descriptor retrieval
+    controls = None
+    if resolve_sd:
+        controls = security_descriptor_control(sdflags=0x07)  # Owner + Group + DACL
+
+    try:
+        conn._ldap_connection.search(
+            search_base=target_dn,
+            search_filter="(objectClass=*)",
+            search_scope=BASE,
+            attributes=attributes,
+            controls=controls
+        )
+
+        if not conn._ldap_connection.entries:
+            logging.error(f"Object not found: {target}")
+            return
+
+        entry = conn._ldap_connection.entries[0]
+
+        # Display results
+        print(f"\n{entry.entry_dn}")
+        print("-" * len(entry.entry_dn))
+
+        for attr_name in sorted(entry.entry_attributes):
+            attr_value = entry[attr_name]
+
+            # Handle security descriptor resolution
+            if resolve_sd and attr_name.lower() == "ntsecuritydescriptor":
+                try:
+                    raw_sd = attr_value.raw_values[0]
+                    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=raw_sd)
+
+                    # Display owner
+                    if sd['OwnerSid']:
+                        owner_sid = format_sid(sd['OwnerSid']).formatCanonical()
+                        owner_name = conn.get_samaccountname_from_sid(owner_sid)
+                        print(f"  Owner: {owner_name} ({owner_sid})")
+
+                    # Display group
+                    if sd['GroupSid']:
+                        group_sid = format_sid(sd['GroupSid']).formatCanonical()
+                        group_name = conn.get_samaccountname_from_sid(group_sid)
+                        print(f"  Group: {group_name} ({group_sid})")
+
+                    # Display DACL ACE count
+                    if sd['Dacl']:
+                        print(f"  DACL ACEs: {len(sd['Dacl'].aces)}")
+                    continue
+                except Exception as e:
+                    logging.debug(f"Failed to parse security descriptor: {e}")
+
+            # Handle raw values
+            if raw:
+                if hasattr(attr_value, 'raw_values'):
+                    values = attr_value.raw_values
+                else:
+                    values = [attr_value.value]
+            else:
+                if hasattr(attr_value, 'values'):
+                    values = attr_value.values if attr_value.values else [attr_value.value]
+                else:
+                    values = [attr_value.value]
+
+            # Format output
+            if values is None:
+                continue
+            elif isinstance(values, list):
+                if len(values) == 0:
+                    continue
+                elif len(values) == 1:
+                    print(f"  {attr_name}: {values[0]}")
+                else:
+                    print(f"  {attr_name}:")
+                    for v in values:
+                        print(f"    {v}")
+            else:
+                print(f"  {attr_name}: {values}")
+
+        print()
+
+    except ldap3.core.exceptions.LDAPException as e:
+        logging.error(f"LDAP error: {e}")
+    except Exception as e:
+        logging.error(f"Error retrieving object: {e}")
 

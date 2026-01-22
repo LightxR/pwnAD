@@ -7,7 +7,7 @@ from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import check_error
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE
 
 
@@ -403,4 +403,93 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
 
     except Exception as e:
         logging.error(f"[-] Failed to remove DNS record: {e}")
-        raise 
+        raise
+
+
+def attribute(conn, target: str, attr: str, values: list = None, raw: bool = False, b64: bool = False):
+    """
+    Remove values from an attribute or clear the entire attribute.
+
+    This function removes specific values from a multi-valued attribute or
+    clears the entire attribute if no values are specified.
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+        attr: Name of the attribute to remove values from
+        values: List of values to remove. If None/empty, clears the entire attribute
+        raw: If True, send values as-is without encoding (default: False)
+        b64: If True, decode values from base64 first (default: False)
+
+    Example:
+        remove attribute user1 servicePrincipalName MSSQLSvc/server:1433
+        remove attribute user1 description  # clears the description attribute
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    # If no values provided, clear the entire attribute
+    if not values:
+        try:
+            logging.debug(f"Clearing attribute {attr} on {target_dn}")
+            conn.modify(target_dn, {attr: [(MODIFY_REPLACE, [])]})
+            logging.info(f"Successfully cleared attribute '{attr}' on {target}")
+        except ldap3.core.exceptions.LDAPException as e:
+            error_code = conn._ldap_connection.result['result']
+            check_error(conn, error_code, e)
+        except Exception as e:
+            logging.error(f"Error clearing attribute: {e}")
+        return
+
+    # Encode values
+    encoded_values = []
+    for value in values:
+        encoded_value = encode_ldap_value(attr, value, raw=raw, b64=b64)
+        if encoded_value is None:
+            logging.error(f"Failed to encode value: {value}")
+            return
+        encoded_values.append(encoded_value)
+
+    # Perform the modification
+    try:
+        logging.debug(f"Removing from {target_dn}: {attr} -= {encoded_values}")
+        conn.modify(target_dn, {attr: [(MODIFY_DELETE, encoded_values)]})
+        logging.info(f"Successfully removed value(s) from attribute '{attr}' on {target}")
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+    except Exception as e:
+        logging.error(f"Error removing attribute value: {e}")
+
+
+def object(conn, target: str):
+    """
+    Delete an LDAP object entirely.
+
+    This function deletes the entire object from Active Directory.
+    Use with caution as this operation is irreversible.
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, DN, or SID)
+
+    Example:
+        remove object testuser
+        remove object "CN=TestOU,DC=domain,DC=local"
+    """
+    # Resolve target to DN
+    target_dn = resolve_target(conn, target)
+    if not target_dn:
+        return
+
+    try:
+        logging.debug(f"Deleting object: {target_dn}")
+        conn.delete(target_dn)
+        logging.info(f"Successfully deleted object: {target}")
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
+    except Exception as e:
+        logging.error(f"Error deleting object: {e}")

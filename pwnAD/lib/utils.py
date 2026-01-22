@@ -1,10 +1,13 @@
 import argparse
+import base64
 import hashlib
 import importlib
 import logging
 import re
+import struct
 import sys
 from ldap3.core.results import RESULT_UNWILLING_TO_PERFORM, RESULT_ENTRY_ALREADY_EXISTS, RESULT_INSUFFICIENT_ACCESS_RIGHTS, RESULT_NO_SUCH_OBJECT, RESULT_CONSTRAINT_VIOLATION
+from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.certificate import hash_digest, hashes
 
@@ -154,3 +157,138 @@ def truncate_key(value: bytes, keysize: int) -> bytes:
         current_num += 1
 
     return output
+
+
+def resolve_target(conn, target: str) -> str | None:
+    """
+    Resolve an identifier (sAMAccountName, DN, or SID) to its Distinguished Name.
+
+    This function provides universal target resolution for LDAP operations,
+    accepting multiple identifier formats and returning the canonical DN.
+
+    Args:
+        conn: LDAP connection object (LDAPConnection instance)
+        target: Target identifier in one of the following formats:
+                - Distinguished Name (starts with CN=, OU=, or DC=)
+                - SID (starts with S-1-)
+                - sAMAccountName (any other string)
+
+    Returns:
+        str: The Distinguished Name of the target object
+        None: If the target could not be resolved
+
+    Example:
+        >>> resolve_target(conn, "Administrator")
+        "CN=Administrator,CN=Users,DC=corp,DC=local"
+        >>> resolve_target(conn, "S-1-5-21-xxx-500")
+        "CN=Administrator,CN=Users,DC=corp,DC=local"
+        >>> resolve_target(conn, "CN=Admin,CN=Users,DC=corp,DC=local")
+        "CN=Admin,CN=Users,DC=corp,DC=local"
+    """
+    target = target.strip()
+    target_lower = target.lower()
+
+    # Case 1: Already a DN (starts with cn=, ou=, or dc=)
+    if target_lower.startswith("cn=") or target_lower.startswith("ou=") or target_lower.startswith("dc="):
+        # Verify the DN exists
+        conn._ldap_connection.search(
+            search_base=conn._baseDN,
+            search_filter=f"(distinguishedName={escape_filter_chars(target)})",
+            attributes=['distinguishedName']
+        )
+        if conn._ldap_connection.entries:
+            return conn._ldap_connection.entries[0].distinguishedName.value
+        else:
+            logging.error(f"DN not found: {target}")
+            return None
+
+    # Case 2: SID (starts with S-1-)
+    if target.startswith("S-1-"):
+        conn._ldap_connection.search(
+            search_base=conn._baseDN,
+            search_filter=f"(objectSid={escape_filter_chars(target)})",
+            attributes=['distinguishedName']
+        )
+        if conn._ldap_connection.entries:
+            return conn._ldap_connection.entries[0].distinguishedName.value
+        else:
+            logging.error(f"SID not found: {target}")
+            return None
+
+    # Case 3: sAMAccountName (default)
+    conn._ldap_connection.search(
+        search_base=conn._baseDN,
+        search_filter=f"(sAMAccountName={escape_filter_chars(target)})",
+        attributes=['distinguishedName']
+    )
+    if conn._ldap_connection.entries:
+        return conn._ldap_connection.entries[0].distinguishedName.value
+    else:
+        logging.error(f"sAMAccountName not found: {target}")
+        return None
+
+
+def encode_ldap_value(attribute: str, value: str, raw: bool = False, b64: bool = False):
+    """
+    Encode a value for LDAP modification based on the attribute type.
+
+    This function handles automatic encoding for special AD attributes
+    that require specific formats (UTF-16-LE, binary SID, etc.).
+
+    Args:
+        attribute: Name of the LDAP attribute being modified
+        value: Value to encode (as string)
+        raw: If True, return value as-is without encoding (default: False)
+        b64: If True, decode value from base64 first (default: False)
+
+    Returns:
+        The encoded value ready for LDAP modification
+
+    Special encodings:
+        - unicodePwd: UTF-16-LE with surrounding quotes
+        - userAccountControl: Integer
+        - pwdLastSet: Integer
+        - accountExpires: Integer
+        - Other: String (default)
+    """
+    # First, handle base64 decoding if requested
+    if b64:
+        try:
+            value = base64.b64decode(value)
+            if raw:
+                return value
+        except Exception as e:
+            logging.error(f"Failed to decode base64 value: {e}")
+            return None
+
+    # If raw mode, return as-is (or decoded bytes if b64 was used)
+    if raw:
+        return value
+
+    attribute_lower = attribute.lower()
+
+    # Special handling for unicodePwd (password changes)
+    if attribute_lower == "unicodepwd":
+        # Password must be enclosed in quotes and encoded as UTF-16-LE
+        return f'"{value}"'.encode('utf-16-le')
+
+    # Integer attributes
+    integer_attributes = [
+        "useraccountcontrol",
+        "pwdlastset",
+        "accountexpires",
+        "logoncount",
+        "badpwdcount",
+        "primarygroupid",
+        "msds-supportedencryptiontypes",
+        "samaccounttype"
+    ]
+    if attribute_lower in integer_attributes:
+        try:
+            return int(value)
+        except ValueError:
+            logging.error(f"Invalid integer value for {attribute}: {value}")
+            return None
+
+    # Default: return as string
+    return value
