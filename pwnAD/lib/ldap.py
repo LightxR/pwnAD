@@ -105,11 +105,11 @@ class LDAPConnection:
 
         if self.lmhash and self.nthash:
             ldap_connection_kwargs['password'] = f"{self.lmhash}:{self.nthash}"
-            logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / hash = {ldap_connection_kwargs['password']}")
+            logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / auth = hash")
 
         else:
             ldap_connection_kwargs['password'] = self.ldap_pass
-            logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / password = {ldap_connection_kwargs['password']}")
+            logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / auth = password")
 
         if seal_and_sign:
             ldap_connection_kwargs['session_security'] = ldap3.ENCRYPT
@@ -387,7 +387,7 @@ class LDAPConnection:
         ldap_connection_kwargs = {'user': self.user, 'raise_exceptions': True, 'authentication': ldap3.SIMPLE}
 
         ldap_connection_kwargs['password'] = self.ldap_pass
-        logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / password = {ldap_connection_kwargs['password']}")
+        logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user} / auth = password")
 
         try:
             ldap_connection = ldap3.Connection(ldap_server, **ldap_connection_kwargs)

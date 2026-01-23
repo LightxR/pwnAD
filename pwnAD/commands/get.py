@@ -281,9 +281,9 @@ def laps(conn):
             logging.info("LAPS password(s) found :")
             for result in results:
                 logging.info(f'{result["SAMAccountname"]} : {result["ms-MCS-AdmPwd"]}')
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         if e.args[0] == "invalid attribute type ms-Mcs-AdmPwd":
-            logging.error(("This domain does not have LAPS configured"))
+            logging.error("This domain does not have LAPS configured")
         else:
             error_code = conn._ldap_connection.result['result']
             check_error(conn, error_code, e)

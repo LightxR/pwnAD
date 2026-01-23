@@ -101,15 +101,15 @@ def execute_action_function(options, connection):
 
 def check_error(conn, error_code, e):
     if error_code == RESULT_ENTRY_ALREADY_EXISTS:
-        logging.error(f"The entry already exists.")
+        logging.error("Entry already exists")
     elif error_code == RESULT_INSUFFICIENT_ACCESS_RIGHTS:
-        logging.error(f"User {conn.user} doesn't have right to perform this action !")
+        logging.error(f"User '{conn.user}' lacks permissions for this operation")
     elif error_code == RESULT_UNWILLING_TO_PERFORM:
-        logging.error(f"Server unwilling to perform the operation: {e}")
+        logging.error(f"Server refused the operation: {e}")
     elif error_code == RESULT_CONSTRAINT_VIOLATION:
-        logging.error(f"Could not modify object, the server reports a constrained violation: \n{e}")
+        logging.error(f"Constraint violation: {e}")
     else:
-        logging.error(f"An unexpected error occurred: {e}")
+        logging.error(f"Unexpected error: {e}")
 
 def parse_lm_nt_hashes(lm_nt_hashes_string):
     lm_hash_value = "aad3b435b51404eeaad3b435b51404ee"

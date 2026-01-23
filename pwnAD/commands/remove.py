@@ -32,7 +32,7 @@ def computer(conn, computer_name):
     try:
         conn.delete(computer.entry_dn)
         logging.info("Successfully deleted %s." % computer_name)
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -57,7 +57,7 @@ def user(conn, user_name):
     try:
         conn.delete(user.entry_dn)
         logging.info("Successfully deleted %s." % user_name)
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -77,9 +77,9 @@ def groupMember(conn, group: str, member: str):
     try:
         conn.modify(group_dn, {'member': [(MODIFY_DELETE, [user_dn])]})
         logging.info(f"{member} successfully removed from {group} !")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
-        check_error(conn, error_code, e)    
+        check_error(conn, error_code, e)
 
 
 def dcsync(conn, trustee):
@@ -118,13 +118,13 @@ def dcsync(conn, trustee):
     new_sd['Dacl'].aces = new_aces
 
     try:
-        conn.modify(conn._baseDN, 
-                      {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]}, 
+        conn.modify(conn._baseDN,
+                      {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]},
                       controls=security_descriptor_control(sdflags=0x04))  # SDFlags = 0x04 pour DACL uniquement
         logging.info(f"Successfully removed DCSYNC rights from user '{trustee}'!")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
-        check_error(conn, error_code, e)  
+        check_error(conn, error_code, e)
 
 
 def genericAll(conn, target, trustee):
@@ -168,9 +168,9 @@ def genericAll(conn, target, trustee):
     try:
         conn.modify(targetDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
         logging.info("Removed GenericAll rights for '%s' on '%s'!" % (trustee, target))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
-        check_error(conn, error_code, e)    
+        check_error(conn, error_code, e)
 
 
 def uac(conn, target: str, flags: list):
@@ -225,7 +225,7 @@ def uac(conn, target: str, flags: list):
     try:
         conn.modify(target_dn, {'userAccountControl': [(MODIFY_REPLACE, [new_uac])]})
         logging.info(f"Successfully removed {flags} from '{target}' userAccountControl")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -253,7 +253,7 @@ def RBCD(conn, computer_name):
     try:
         conn.modify(target.entry_dn, {'msDS-AllowedToActOnBehalfOfOtherIdentity':[MODIFY_REPLACE, [sd.getData()]]})
         logging.info('Delegation rights cleared successfully!')
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -277,7 +277,7 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
     if zone is None:
         zone = conn.domain
 
-    logging.info(f"[*] Removing DNS record: {name}.{zone}")
+    logging.info(f"Removing DNS record: {name}.{zone}")
 
     try:
         # Build zone DN
@@ -319,7 +319,7 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
                 continue
 
         if record_dn is None:
-            logging.error(f"[-] DNS record '{name}' not found in zone '{zone}'")
+            logging.error(f"DNS record '{name}' not found in zone '{zone}'")
             return
 
         # If no specific data/type provided, delete the entire DNS node
@@ -327,8 +327,8 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
             logging.debug(f"Deleting entire DNS node at {record_dn}")
             try:
                 conn.delete(record_dn)
-                logging.info(f"[+] {name} has been successfully deleted")
-            except Exception as e:
+                logging.info(f"DNS record '{name}' deleted successfully")
+            except ldap3.core.exceptions.LDAPException as e:
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
             return
@@ -378,7 +378,7 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
                 records_to_keep.append(record_bytes)
 
         if removed_count == 0:
-            logging.error(f"[-] No matching DNS records found to remove")
+            logging.error("No matching DNS records found to remove")
             return
 
         # Update or delete based on remaining records
@@ -387,8 +387,8 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
             logging.debug(f"No records remaining, deleting DNS node at {record_dn}")
             try:
                 conn.delete(record_dn)
-                logging.info(f"[+] All DNS records removed, {name} has been deleted")
-            except Exception as e:
+                logging.info(f"All DNS records removed, '{name}' deleted")
+            except ldap3.core.exceptions.LDAPException as e:
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
         else:
@@ -396,13 +396,13 @@ def dnsRecord(conn, name: str, data: str = None, dnstype: str = None, zone: str 
             logging.debug(f"Updating record with {len(records_to_keep)} remaining record(s)")
             try:
                 conn.modify(record_dn, {"dnsRecord": [(MODIFY_REPLACE, records_to_keep)]})
-                logging.info(f"[+] Removed {removed_count} DNS record(s) from {name}")
-            except Exception as e:
+                logging.info(f"Removed {removed_count} DNS record(s) from '{name}'")
+            except ldap3.core.exceptions.LDAPException as e:
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
 
     except Exception as e:
-        logging.error(f"[-] Failed to remove DNS record: {e}")
+        logging.error(f"Failed to remove DNS record: {e}")
         raise
 
 

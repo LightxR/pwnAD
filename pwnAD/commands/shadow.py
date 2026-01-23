@@ -61,7 +61,7 @@ def set_key_credentials(conn, target_dn, key_credential):
     try:
         conn._ldap_connection.modify(target_dn,{"msDS-KeyCredentialLink": [ldap3.MODIFY_REPLACE, key_credential]},)
         return True
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
         return False

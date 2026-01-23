@@ -159,7 +159,7 @@ def _set_security_descriptor(conn, target_dn, sd):
             controls=controls
         )
         return True
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
         return False

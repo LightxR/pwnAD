@@ -62,7 +62,7 @@ def computer(conn, new_computer=None, new_password=None):
         else:
             conn.add(newComputerDn.decode('utf-8'), ['top','person','organizationalPerson','user','computer'], ucd)
             logging.info('Adding new computer with username: %s and password: %s result: OK' % (new_computer, new_password))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -100,11 +100,11 @@ def user(conn, new_user, new_password, OU=None):
         else:
             conn.add(user_dn, attributes=attr)
             logging.info(f"User {new_user} has been created successfully.")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
-        
-    
+
+
 def dcsync(conn, trustee):
     """
     Grant DCSync rights to a user by adding replication ACEs to the domain root.
@@ -140,7 +140,7 @@ def dcsync(conn, trustee):
     try:
         conn.modify(conn._baseDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
         logging.info("Granted user '%s' DCSYNC rights!" % (trustee))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -174,7 +174,7 @@ def genericAll(conn, target, trustee):
     try:
         conn.modify(targetDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
         logging.info("Granted user '%s' generiAll rights over '%s' !" % (trustee, target))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -199,7 +199,7 @@ def groupMember(conn, group: str, member: str):
     try:
         conn.modify(group_dn, {'member': [(MODIFY_ADD, [user_dn])]})
         logging.info(f"{member} added to {group} successfully !")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -216,7 +216,7 @@ def write_gpo_dacl(conn, user, gposid):
     """
     conn.search(conn._baseDN, '(&(objectclass=person)(sAMAccountName=%s))' % user, attributes=['objectSid'])
     if len(conn._ldap_connection.entries) <= 0:
-        logging.error("Didnt find the given user")
+        logging.error("User not found")
         return
 
     user = conn._ldap_connection.entries[0]
@@ -225,7 +225,7 @@ def write_gpo_dacl(conn, user, gposid):
     conn.search(conn._baseDN, '(&(objectclass=groupPolicyContainer)(name=%s))' % gposid, attributes=['objectSid','nTSecurityDescriptor'], controls=controls)
 
     if len(conn._ldap_connection.entries) <= 0:
-        logging.error("Didnt find the given gpo")
+        logging.error("GPO not found")
         return
     gpo = conn._ldap_connection.entries[0]
 
@@ -238,7 +238,7 @@ def write_gpo_dacl(conn, user, gposid):
     try:
         conn.modify(gpo.entry_dn, {'nTSecurityDescriptor':(MODIFY_REPLACE, [data])}, controls=controls)
         logging.info('LDAP server claims to have taken the secdescriptor. Have fun')
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -295,7 +295,7 @@ def RBCD(conn, target, grantee):
         conn.modify(target_result.entry_dn, {'msDS-AllowedToActOnBehalfOfOtherIdentity':[MODIFY_REPLACE, [sd.getData()]]})
         logging.info('Delegation rights modified successfully!')
         logging.info('%s can now impersonate users on %s via S4U2Proxy' % (grantee, target))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -352,7 +352,7 @@ def uac(conn, target: str, flags: list):
     try:
         conn.modify(target_dn, {'userAccountControl': [(MODIFY_REPLACE, [new_uac])]})
         logging.info(f"Successfully added {flags} to '{target}' userAccountControl")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -378,7 +378,7 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
     if zone is None:
         zone = conn.domain
 
-    logging.info(f"[*] Adding DNS record: {name}.{zone} ({dnstype}) -> {data}")
+    logging.info(f"Adding DNS record: {name}.{zone} ({dnstype}) -> {data}")
 
     try:
         # Build zone DN
@@ -470,8 +470,8 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
             logging.debug(f"Updating existing record at {record_dn}")
             try:
                 conn.modify(record_dn, {"dnsRecord": [(MODIFY_REPLACE, new_dnsrecord_list)]})
-                logging.info(f"[+] {name} has been successfully updated")
-            except Exception as e:
+                logging.info(f"DNS record '{name}' updated successfully")
+            except ldap3.core.exceptions.LDAPException as e:
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
         else:
@@ -486,13 +486,13 @@ def dnsRecord(conn, name: str, data: str, dnstype: str = "A", zone: str = None, 
             logging.debug(f"Creating new record at {record_dn}")
             try:
                 conn.add(record_dn, attributes=attributes)
-                logging.info(f"[+] {name} has been successfully added")
-            except Exception as e:
+                logging.info(f"DNS record '{name}' added successfully")
+            except ldap3.core.exceptions.LDAPException as e:
                 error_code = conn._ldap_connection.result['result']
                 check_error(conn, error_code, e)
 
     except Exception as e:
-        logging.error(f"[-] Failed to add DNS record: {e}")
+        logging.error(f"Failed to add DNS record: {e}")
         raise
 
 

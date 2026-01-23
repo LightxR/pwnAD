@@ -29,7 +29,7 @@ def password(conn, account, new_password):
     try:
         conn.modify(targetDN, {'unicodePwd': [(ldap3.MODIFY_REPLACE, ['"{}"'.format(new_password).encode('utf-16-le')])]})
         logging.info("Successfully changed %s password to: %s" % (account, new_password))
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -85,9 +85,9 @@ def owner(conn, target: str, new_owner: str):
             ])},
             controls=security_descriptor_control(sdflags=0x01))
         logging.info('OwnerSid modified successfully!')
-    except Exception as e:
-            error_code = conn._ldap_connection.result['result']
-            check_error(conn, error_code, e)
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)
 
 
 def computer_name(conn, current_name, new_name):
@@ -113,7 +113,7 @@ def computer_name(conn, current_name, new_name):
     try:
         conn.modify(computer_dn, {'sAMAccountName':(ldap3.MODIFY_REPLACE, [new_name])})
         logging.info("Updated sAMAccountName successfully")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -150,7 +150,7 @@ def dontreqpreauth(conn, account, flag):
     try:
         conn.modify(user_dn, {'userAccountControl':(ldap3.MODIFY_REPLACE, [userAccountControl])})
         logging.info("Updated userAccountControl attribute successfully")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
@@ -197,7 +197,7 @@ def _toggle_account_enable_disable(conn, user_name, enable):
     try:
         conn.modify(user_dn, {'userAccountControl':(ldap3.MODIFY_REPLACE, [userAccountControl])})
         logging.info("Updated userAccountControl attribute successfully")
-    except Exception as e:
+    except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
 
