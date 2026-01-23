@@ -105,7 +105,19 @@ def check_error(conn, error_code, e):
     elif error_code == RESULT_INSUFFICIENT_ACCESS_RIGHTS:
         logging.error(f"User '{conn.user}' lacks permissions for this operation")
     elif error_code == RESULT_UNWILLING_TO_PERFORM:
-        logging.error(f"Server refused the operation: {e}")
+        # Parse Windows error codes from LDAP message for more specific errors
+        error_str = str(e)
+        if "0000052D" in error_str:
+            logging.error("Password does not meet the domain password policy requirements")
+        elif "00000524" in error_str:
+            logging.error("Account already exists")
+        elif "00000532" in error_str:
+            logging.error("Password expired")
+        elif "00000775" in error_str:
+            logging.error("Account is locked out")
+        else:
+            logging.error(f"Server refused the operation (possible causes: insufficient permissions, policy violation, no secure connection)")
+            logging.debug(f"LDAP error details: {e}")
     elif error_code == RESULT_CONSTRAINT_VIOLATION:
         logging.error(f"Constraint violation: {e}")
     else:
