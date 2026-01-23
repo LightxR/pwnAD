@@ -103,12 +103,15 @@ def start_interactive_mode(conn):
                 continue
 
             elif command == "switch_user":
-                args = interactive_parser.parse_args([command] + arguments)
+                try:
+                    args = interactive_parser.parse_args([command] + arguments)
+                except SystemExit:
+                    continue
 
                 domain = conn.domain if args.domain == None else args.domain
                 dc_ip = conn.target if args.dc_ip == None else args.dc_ip
 
-                if not args.username or not (args.password or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
+                if not args.username or not (args.password is not None or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
                     logging.error("You need to provide at least a username and secret to perform switching operation")
                     continue
 

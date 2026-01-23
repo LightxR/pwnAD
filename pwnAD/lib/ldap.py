@@ -129,7 +129,7 @@ class LDAPConnection:
                 raise LDAPAuthenticationError(str(e))
 
         except ldap3.core.exceptions.LDAPInvalidCredentialsResult:
-                logging.warning('Server returns LDAPInvalidCredentialsResult')
+                logging.debug('Server returns LDAPInvalidCredentialsResult')
                 # https://github.com/zyn3rgy/LdapRelayScan#ldaps-channel-binding-token-requirements
                 if 'AcceptSecurityContext error, data 80090346' in ldap_connection.result['message'] and not self._tls_channel_binding_supported:
                         
@@ -140,34 +140,37 @@ class LDAPConnection:
                         raise LDAPAuthenticationError('Server requires Channel Binding Token not supported with hash authentication')
                     
                     else:
-                        logging.debug('Server requires Channel Binding Token but you are using password authentication,'
-                                            ' falling back to SIMPLE authentication, hoping LDAPS port is open')
-                        self._simple_auth('ldaps')
-                        return
+                        # Simple bind doesn't work with empty passwords, so only fallback if password is not empty
+                        if self.ldap_pass:
+                            logging.debug('Server requires Channel Binding Token but you are using password authentication,'
+                                                ' falling back to SIMPLE authentication, hoping LDAPS port is open')
+                            self._simple_auth('ldaps')
+                            return
+                        else:
+                            raise LDAPAuthenticationError('Invalid Credentials')
                         
                 elif self._tls_channel_binding_supported == True and not tls_channel_binding:
-                    logging.warning('Falling back to TLS with channel binding')
-                    self._ntlm_auth(ldap_scheme, tls_channel_binding=True)
+                    logging.debug('Falling back to TLS with channel binding')
+                    self._ntlm_auth('ldaps', tls_channel_binding=True)
                     return
                 
                 else:
-                    logging.critical('Invalid Credentials')
                     raise LDAPAuthenticationError('Invalid Credentials')
 
         except ldap3.core.exceptions.LDAPStrongerAuthRequiredResult:
-            logging.warning('Server returns LDAPStrongerAuthRequiredResult')
-            
+            logging.debug('Server returns LDAPStrongerAuthRequiredResult')
+
             if not self._sign_and_seal_supported:
-                logging.warning('Sealing not available, falling back to LDAPS')
+                logging.debug('Sealing not available, falling back to LDAPS')
                 self._ntlm_auth('ldaps')
                 return
             else:
-                logging.warning('Falling back to NTLM sealing')
+                logging.debug('Falling back to NTLM sealing')
                 self._ntlm_auth(ldap_scheme, seal_and_sign=True)
                 return
 
         except Exception as e:
-            logging.info(f"Couldn't connect to LDAP server.\n{e}")
+            logging.debug(f"Couldn't connect to LDAP server.\n{e}")
             raise
 
         who_am_i = ldap_connection.extend.standard.who_am_i()
@@ -396,7 +399,9 @@ class LDAPConnection:
                                           'not supporting SHA1 as signing algorithm for certificates')
                 raise LDAPAuthenticationError(str(e))
         except ldap3.core.exceptions.LDAPInvalidCredentialsResult as e:
-            logging.critical('Invalid Credentials')
+            raise LDAPAuthenticationError('Invalid Credentials')
+        except ldap3.core.exceptions.LDAPBindError as e:
+            # "password is mandatory in simple bind" when password is empty
             raise LDAPAuthenticationError('Invalid Credentials')
 
         who_am_i = ldap_connection.extend.standard.who_am_i()
@@ -419,8 +424,11 @@ class LDAPConnection:
         else:
             try :
                 self._ntlm_auth(ldap_scheme)
-            except:
-                logging.error("Error while trying to connect with NTLM authentication, falling back to simple authentication")
+            except LDAPAuthenticationError:
+                # Don't fallback to simple auth if password is empty (simple bind doesn't support it)
+                if not self.ldap_pass:
+                    raise
+                logging.debug("Error while trying to connect with NTLM authentication, falling back to simple authentication")
                 self._simple_auth(ldap_scheme)
 
     
