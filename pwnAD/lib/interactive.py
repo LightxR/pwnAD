@@ -34,9 +34,9 @@ def start_interactive_mode(conn):
     print(BANNER)
 
     shell = True
-    interactive_parser = parser.interactive_parser()
+    interactive_parser_obj, action_parsers = parser.interactive_parser()
 
-    interactive_completer = Completer(interactive_parser)
+    interactive_completer = Completer(interactive_parser_obj)
     readline.set_completer(interactive_completer.complete)
     readline.parse_and_bind("tab: complete")
     readline.set_completer_delims("\n")
@@ -45,7 +45,9 @@ def start_interactive_mode(conn):
     while shell == True:
         try:
 
-            user_input = input(f"pwnAD [\x1b[31m{conn.user}\x1b[0m]> ").strip()
+            # \x01 et \x02 indiquent à readline d'ignorer les séquences ANSI pour le calcul de largeur
+            prompt = f"pwnAD [\x01\x1b[31m\x02{conn.user}\x01\x1b[0m\x02]> "
+            user_input = input(prompt).strip()
             if not user_input:
                 continue
 
@@ -108,7 +110,7 @@ def start_interactive_mode(conn):
 
             elif command == "switch_user":
                 try:
-                    args = interactive_parser.parse_args([command] + arguments)
+                    args = interactive_parser_obj.parse_args([command] + arguments)
                 except SystemExit:
                     continue
 
@@ -167,12 +169,17 @@ def start_interactive_mode(conn):
                 infos(conn)
                 continue
 
-            elif command == "help" or (arguments == [] and command not in ["getTGT", "getST", "getNThash", "getPFX"]):
-                interactive_parser.print_help()
+            elif command == "help":
+                interactive_parser_obj.print_help()
+                continue
+
+            # If command requires a function but none provided, show command-specific help
+            elif arguments == [] and command in action_parsers:
+                action_parsers[command].print_help()
                 continue
 
             try:
-                args = interactive_parser.parse_args([command] + arguments)
+                args = interactive_parser_obj.parse_args([command] + arguments)
                 logging.debug(f"Command parsed successfully: {args}")
 
 

@@ -76,6 +76,7 @@ def authentication_args(parser):
 
 def get_parser(interactive=False):
     all_subparsers = []
+    action_parsers = {}  # Parsers for actions that require a function
 
     description = """
 Active Directory exploitation tool for LDAP and Kerberos protocols.
@@ -154,6 +155,7 @@ Functions:
     )
     add_subparsers = parser_add.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_add)
+    action_parsers['add'] = parser_add
 
     # ADD specific functions
     add_user_parser = add_subparsers.add_parser('user', help="Add a user")
@@ -234,6 +236,7 @@ Functions:
     )
     remove_subparsers = parser_remove.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_remove)
+    action_parsers['remove'] = parser_remove
 
     # REMOVE specific functions 
     remove_computer_parser = remove_subparsers.add_parser('computer', help="Remove a computer")
@@ -319,6 +322,7 @@ Functions:
     )
     get_subparsers = parser_get.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_get)
+    action_parsers['get'] = parser_get
 
     # GET specific functions
     get_user_parser = get_subparsers.add_parser('user', help="Get user account information")
@@ -448,6 +452,7 @@ Functions:
     )
     modify_subparsers = parser_modify.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_modify)
+    action_parsers['modify'] = parser_modify
     
     # MODIFY specific functions
     modify_password_parser = modify_subparsers.add_parser('password', help="Modify a password for a specified account")
@@ -518,6 +523,7 @@ Functions:
     )
     shadow_subparsers = parser_shadow.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_shadow)
+    action_parsers['shadow'] = parser_shadow
     
     # SHADOW specific functions
     shadow_auto_parser = shadow_subparsers.add_parser('auto', help="Add a new Key Credential to the target account, authenticate with the Key Credential to retrieve the NT hash and a TGT for the target, and finally restore the old Key Credential attribute")
@@ -566,6 +572,7 @@ Functions:
     )
     dacl_subparsers = parser_dacl.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_dacl)
+    action_parsers['dacl'] = parser_dacl
 
     # Available rights for --right argument
     dacl_rights_choices = [
@@ -668,10 +675,10 @@ Functions:
 
         parser_start_tls = subparsers.add_parser('start_tls', help='Initiate TLS connection')
 
-    return parser, all_subparsers
+    return parser, all_subparsers, action_parsers
 
 def parseArgs():
-    parser, all_subparsers = get_parser()
+    parser, all_subparsers, action_parsers = get_parser()
 
     authentication_args(parser)
     for subparser in all_subparsers:
@@ -683,10 +690,10 @@ def parseArgs():
 
     args = parser.parse_args()
 
-    return args
+    return args, action_parsers
 
 
 def interactive_parser():
-    parser, _ = get_parser(interactive=True)
+    parser, _, action_parsers = get_parser(interactive=True)
 
-    return parser
+    return parser, action_parsers

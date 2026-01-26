@@ -11,18 +11,24 @@ import pwnAD.lib.logger as logger
 def main():
     logger.init()
 
-    options = parser.parseArgs()
+    options, action_parsers = parser.parseArgs()
     if options.debug is True:
         logging.getLogger().setLevel(logging.DEBUG)
     else:
         logging.getLogger().setLevel(logging.INFO)
-    
+
     if options.dc_ip is None:
         return "You need to specify a target with --dc-ip"
 
-    if not options.interactive and (options.action == None or (options.action not in ["query", "getTGT", "getST", "getNThash", "getPFX"] and options.function == None)):
-        logging.error("No action or function has been specified, use --help for more information")
-        sys.exit(-1)
+    # Check if action requires a function
+    if not options.interactive:
+        if options.action is None:
+            logging.error("No action has been specified, use --help for more information")
+            sys.exit(-1)
+        elif options.action in action_parsers and options.function is None:
+            # Action specified but no function - show help for that action
+            action_parsers[options.action].print_help()
+            sys.exit(-1)
 
     authenticate_kwargs = {}
     if options.action == "getTGT":
