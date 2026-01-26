@@ -302,7 +302,7 @@ def get_object_sid_from_certificate(
     try:
         object_sid = certificate.extensions.get_extension_for_oid(NTDS_CA_SECURITY_EXT)
 
-        sid = object_sid.value.valcue
+        sid = object_sid.value.value
         return sid[sid.find(b"S-1-5") :].decode()
     except:
         pass

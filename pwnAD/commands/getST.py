@@ -32,7 +32,18 @@ from pwnAD.commands.getNThash import getNThash
 
 
 class GETST:
+    """Handler for requesting Service Tickets via S4U2Self and S4U2Proxy."""
+
     def __init__(self, target, password, domain, options):
+        """
+        Initialize GETST for Service Ticket requests.
+
+        Args:
+            target: Target username
+            password: User password (can be empty if using hash/key)
+            domain: Target domain
+            options: Options object with authentication parameters
+        """
         self.__password = password
         self.__user = target
         self.__domain = domain
@@ -52,6 +63,13 @@ class GETST:
             self.__lmhash, self.__nthash = options.hashes.split(':')
 
     def saveTicket(self, ticket, sessionKey):
+        """
+        Save the service ticket to a ccache file.
+
+        Args:
+            ticket: The service ticket to save
+            sessionKey: The session key for the ticket
+        """
         ccache = CCache()
         if self.__options.altservice is not None:
             decodedST = decoder.decode(ticket, asn1Spec=TGS_REP())[0]
@@ -126,6 +144,22 @@ class GETST:
         ccache.saveFile(self.__saveFileName + '.ccache')
 
     def doS4U2ProxyWithAdditionalTicket(self, tgt, cipher, oldSessionKey, sessionKey, nthash, aesKey, kdcHost, additional_ticket_path):
+        """
+        Perform S4U2Proxy using an existing additional ticket instead of S4U2Self.
+
+        Args:
+            tgt: Ticket Granting Ticket
+            cipher: Cipher for encryption
+            oldSessionKey: Old session key
+            sessionKey: Current session key
+            nthash: NT hash for decryption
+            aesKey: AES key for decryption
+            kdcHost: KDC hostname
+            additional_ticket_path: Path to additional ticket ccache file
+
+        Returns:
+            Tuple of (ticket, cipher, oldSessionKey, sessionKey)
+        """
         if not os.path.isfile(additional_ticket_path):
             logging.error("Ticket %s doesn't exist" % additional_ticket_path)
             exit(0)
@@ -316,6 +350,21 @@ class GETST:
             return r, None, sessionKey, None
 
     def doS4U(self, tgt, cipher, oldSessionKey, sessionKey, nthash, aesKey, kdcHost):
+        """
+        Perform S4U2Self and S4U2Proxy to get a service ticket for impersonation.
+
+        Args:
+            tgt: Ticket Granting Ticket
+            cipher: Cipher for encryption
+            oldSessionKey: Old session key
+            sessionKey: Current session key
+            nthash: NT hash for decryption
+            aesKey: AES key for decryption
+            kdcHost: KDC hostname
+
+        Returns:
+            Tuple of (ticket, cipher, oldSessionKey, sessionKey)
+        """
         decodedTGT = decoder.decode(tgt, asn1Spec=AS_REP())[0]
         # Extract the ticket from the TGT
         ticket = Ticket()
@@ -636,6 +685,7 @@ class GETST:
         return r, None, sessionKey, None
 
     def run(self):
+        """Execute the Service Ticket request process."""
         tgt = None
 
         # Do we have a TGT cached?
@@ -694,6 +744,15 @@ class GETST:
 
 
 def getST(auth):
+    """
+    Request a Service Ticket using various authentication methods.
+
+    Args:
+        auth: Authenticate object with credentials
+
+    Note:
+        Supports password, hash, AES key, and certificate authentication
+    """
     if (auth.cert and auth.key) is not None:
         logging.info("Using certificate for authentication")
         logging.info("Pre-authenticating with pkinit and unpacking the hash")

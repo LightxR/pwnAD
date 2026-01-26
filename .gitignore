@@ -162,3 +162,51 @@ cython_debug/
 #.idea/
 
 *.pfx
+
+# Active Directory pentest artifacts
+*.ccache
+*.kirbi
+*.keytab
+*.p12
+*.crt
+*.pem
+*.der
+credentials.txt
+secrets.txt
+hashes.txt
+ntds.dit
+sam
+system
+security
+
+# Test lab configurations
+lab_config.yml
+lab_secrets.env
+test_credentials.json
+
+# Output files
+output/
+results/
+loot/
+*.bloodhound
+*.zip
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local test scripts
+test_local.py
+debug_*.py
+playground.py
+
+# Others
+CLAUDE.md
+scripts/
+tests/
+.env.test
+

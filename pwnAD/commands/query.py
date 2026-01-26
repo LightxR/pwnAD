@@ -12,7 +12,24 @@ LDAP_SERVER_NOTIFICATION_OID = "1.2.840.113556.1.4.528"
 
 
 def query(conn, search_filter, attributes, search_base=None,page_size=1000, size_limit=0, search_scope=ldap3.SUBTREE, raw=False, simple=False, do_print=True):
+    """
+    Execute an LDAP query with paged results.
 
+    Args:
+        conn: LDAP connection object
+        search_filter: LDAP filter string
+        attributes: Attribute(s) to retrieve (string or list)
+        search_base: Search base DN (default: domain root)
+        page_size: Number of results per page (default: 1000)
+        size_limit: Maximum number of results (0 = unlimited)
+        search_scope: LDAP search scope (default: SUBTREE)
+        raw: Return raw dict without formatting (default: False)
+        simple: Return simple list of values (default: False)
+        do_print: Print results (default: True)
+
+    Returns:
+        dict or list depending on parameters, None on error
+    """
     results = {}
     try:
         # https://ldap3.readthedocs.io/en/latest/searches.html#the-search-operation

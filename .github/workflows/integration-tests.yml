@@ -1,0 +1,56 @@
+name: Integration Tests
+
+on:
+  # Only run on manual trigger or weekly schedule
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0'  # Run weekly on Sunday at 2 AM
+
+jobs:
+  integration:
+    name: Integration Tests (AD Lab)
+    runs-on: ubuntu-latest
+    # This workflow is commented out as it requires a test AD environment
+    # Uncomment and configure when you have a test lab available
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-timeout
+        pip install -e .
+
+    # TODO: Configure connection to test AD lab
+    # This could be:
+    # - A containerized AD (like docker-ad)
+    # - A dedicated test VM
+    # - A cloud-based test environment
+
+    - name: Run integration tests
+      run: |
+        echo "Integration tests require AD lab configuration"
+        echo "Set up AD_LAB_AVAILABLE=1 and provide connection details"
+        echo "Skipping for now..."
+        # AD_LAB_AVAILABLE=1 pytest tests/integration/ -v --cov=pwnAD
+      env:
+        AD_LAB_AVAILABLE: "0"
+        # AD_LAB_DC_IP: ${{ secrets.AD_LAB_DC_IP }}
+        # AD_LAB_DOMAIN: ${{ secrets.AD_LAB_DOMAIN }}
+        # AD_LAB_USER: ${{ secrets.AD_LAB_USER }}
+        # AD_LAB_PASSWORD: ${{ secrets.AD_LAB_PASSWORD }}
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-results
+        path: |
+          coverage.xml
+          htmlcov/
+      if: always()

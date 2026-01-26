@@ -23,6 +23,14 @@ from pwnAD.lib.pkinit import PA_PK_AS_REP, Enctype, KDCDHKeyInfo, build_pkinit_a
 
 
 def saveTicket(auth, ticket, sessionKey):
+    """
+    Save a TGT to a ccache file.
+
+    Args:
+        auth: Authenticate object containing username
+        ticket: The TGT to save
+        sessionKey: The session key for the TGT
+    """
     logging.info('Saving ticket in %s' % (auth.username + '.ccache'))
     from impacket.krb5.ccache import CCache
     ccache = CCache()
@@ -31,6 +39,19 @@ def saveTicket(auth, ticket, sessionKey):
     ccache.saveFile(auth.username + '.ccache')
 
 def getTGT(auth):
+    """
+    Request a Ticket Granting Ticket (TGT) using various authentication methods.
+
+    Args:
+        auth: Authenticate object with credentials
+
+    Returns:
+        Tuple of (as_rep, cipher, session_key, t_key) for PKINIT
+        or (tgt, cipher, oldSessionKey, sessionKey) for password/hash
+
+    Note:
+        Supports password, NT hash, AES key, and certificate (PKINIT) authentication
+    """
     userName = Principal(auth.username, type=auth.principalType.value)
     if not (auth.cert and auth.key):
         try:

@@ -1,0 +1,74 @@
+site_name: pwnAD
+site_description: Active Directory exploitation tool focusing on LDAP and Kerberos protocols
+site_author: LightxR
+site_url: https://lightxr.github.io/pwnAD
+
+repo_name: LightxR/pwnAD
+repo_url: https://github.com/LightxR/pwnAD
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Authentication: authentication.md
+  - Interactive Mode: interactive-mode.md
+  - Commands:
+      - Overview: commands/index.md
+      - add: commands/add.md
+      - remove: commands/remove.md
+      - get: commands/get.md
+      - modify: commands/modify.md
+      - query: commands/query.md
+  - Modules:
+      - Overview: modules/index.md
+      - Shadow Credentials: modules/shadow.md
+  - Kerberos:
+      - Overview: kerberos/index.md
+      - getTGT: kerberos/getTGT.md
+      - getST: kerberos/getST.md
+      - getNThash: kerberos/getNThash.md
+  - Troubleshooting: troubleshooting.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/LightxR/pwnAD

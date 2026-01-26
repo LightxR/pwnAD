@@ -2,11 +2,12 @@ import logging
 import readline
 import os
 import shlex
+import subprocess
 import sys
 
 import pwnAD.lib.parser as parser
 from pwnAD.lib.auth import Authenticate
-from pwnAD.lib.ldap import LDAPConnection
+from pwnAD.lib.ldap import LDAPConnection, LDAPAuthenticationError
 from pwnAD.lib.utils import execute_action_function, Completer
 from pwnAD.lib.version import BANNER
 
@@ -17,10 +18,10 @@ def infos(conn):
     logging.info(f"Port: \t{conn.port}")
     logging.info(f"Domain: \t{conn.domain}")
     logging.info(f"User: \t{conn.user if conn.use_kerberos == True and conn.ldap_user == None else conn.ldap_user}")
-    logging.info(f"Password: \t{conn.ldap_pass}")
-    logging.info(f"LM_hash: \t{conn.lmhash}")
-    logging.info(f"NT_hash: \t{conn.nthash}")
-    logging.info(f"aesKey: \t{conn.aesKey}")
+    logging.info(f"Password: \t{'[SET]' if conn.ldap_pass else '[NOT SET]'}")
+    logging.info(f"LM_hash: \t{'[SET]' if conn.lmhash else '[NOT SET]'}")
+    logging.info(f"NT_hash: \t{'[SET]' if conn.nthash else '[NOT SET]'}")
+    logging.info(f"aesKey: \t{'[SET]' if conn.aesKey else '[NOT SET]'}")
     logging.info(f"pfx: \t{True if conn.pfx else None}")
     logging.info(f"key: \t{True if (conn.key and not conn.pfx) else None}")
     logging.info(f"cert: \t{True if (conn.cert and not conn.pfx) else None}")
@@ -33,9 +34,9 @@ def start_interactive_mode(conn):
     print(BANNER)
 
     shell = True
-    interactive_parser = parser.interactive_parser()
+    interactive_parser_obj, action_parsers = parser.interactive_parser()
 
-    interactive_completer = Completer(interactive_parser)
+    interactive_completer = Completer(interactive_parser_obj)
     readline.set_completer(interactive_completer.complete)
     readline.parse_and_bind("tab: complete")
     readline.set_completer_delims("\n")
@@ -44,13 +45,18 @@ def start_interactive_mode(conn):
     while shell == True:
         try:
 
-            user_input = input(f"pwnAD [\x1b[31m{conn.user}\x1b[0m]> ").strip()
+            # \x01 et \x02 indiquent à readline d'ignorer les séquences ANSI pour le calcul de largeur
+            prompt = f"pwnAD [\x01\x1b[31m\x02{conn.user}\x01\x1b[0m\x02]> "
+            user_input = input(prompt).strip()
             if not user_input:
                 continue
 
             if user_input.startswith('!'):
                 command_to_run = user_input[1:]
-                os.system(command_to_run)
+                try:
+                    subprocess.run(command_to_run, shell=True, check=False)
+                except Exception as e:
+                    logging.error(f"Command execution failed: {e}")
                 continue
 
             user_input_list = shlex.split(user_input)  
@@ -66,6 +72,7 @@ def start_interactive_mode(conn):
                 continue
 
             elif command == "rebind":
+                backup_conn = conn
                 try:
                     if conn._ldap_connection.bound:
                         logging.debug("Connection already bound")
@@ -96,19 +103,26 @@ def start_interactive_mode(conn):
                         new_conn.connect()
                         conn = new_conn
                         logging.info("Successfully performed a connection rebind.")
-                    except:
-                        logging.error(f"An error occurred when trying to rebind connection : {e}")
+                    except (LDAPAuthenticationError, Exception) as rebind_error:
+                        logging.error(f"An error occurred when trying to rebind connection: {rebind_error}")
+                        conn = backup_conn
                 continue
 
             elif command == "switch_user":
-                args = interactive_parser.parse_args([command] + arguments)
-                
+                try:
+                    args = interactive_parser_obj.parse_args([command] + arguments)
+                except SystemExit:
+                    continue
+
                 domain = conn.domain if args.domain == None else args.domain
                 dc_ip = conn.target if args.dc_ip == None else args.dc_ip
 
-                if not args.username and not (args.password or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
+                if not args.username or not (args.password is not None or args.hashes or args.aesKey or args.pfx or (args.cert and args.key)):
                     logging.error("You need to provide at least a username and secret to perform switching operation")
                     continue
+
+                # Backup current connection before attempting switch
+                backup_conn = conn
 
                 try:
                     authenticate = Authenticate(
@@ -127,12 +141,27 @@ def start_interactive_mode(conn):
                         _do_tls=args._do_tls,
                         port=args.port
                         )
-                        
-                    conn = authenticate.ldap_authentication()
-                    logging.info(f"Successfully switched user to {args.username}.")
 
+                    new_conn = authenticate.ldap_authentication()
+
+                    # Verify the connection is properly bound before accepting it
+                    if new_conn._ldap_connection is None or not new_conn._ldap_connection.bound:
+                        raise LDAPAuthenticationError("Connection established but LDAP bind failed")
+
+                    conn = new_conn
+                    logging.info(f"Successfully switched user to {args.username}.")
+                except ValueError as e:
+                    logging.error(f"Authentication failed: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
+                except LDAPAuthenticationError as e:
+                    logging.error(f"Authentication failed: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
                 except Exception as e:
-                    logging.error(f"An error occurred when trying to switch user : {e}")
+                    logging.error(f"An error occurred when trying to switch user: {e}")
+                    logging.info("Keeping previous connection active.")
+                    conn = backup_conn
                 continue
 
 
@@ -140,12 +169,17 @@ def start_interactive_mode(conn):
                 infos(conn)
                 continue
 
-            elif command == "help" or (arguments == [] and command not in ["getTGT", "getST", "getNThash", "getPFX"]):
-                interactive_parser.print_help()
+            elif command == "help":
+                interactive_parser_obj.print_help()
+                continue
+
+            # If command requires a function but none provided, show command-specific help
+            elif arguments == [] and command in action_parsers:
+                action_parsers[command].print_help()
                 continue
 
             try:
-                args = interactive_parser.parse_args([command] + arguments)
+                args = interactive_parser_obj.parse_args([command] + arguments)
                 logging.debug(f"Command parsed successfully: {args}")
 
 
@@ -185,24 +219,31 @@ def start_interactive_mode(conn):
                             'force_forwardable' : args.force_forwardable,
                             'renew' : args.renew
         }
-                    authenticate = Authenticate(
-                        domain=domain,
-                        dc_ip=dc_ip,
-                        username=args.username,
-                        password=args.password,
-                        hashes=args.hashes,
-                        aesKey=args.aesKey,
-                        pfx=args.pfx,
-                        pfx_pass=args.pfx_pass,
-                        key=args.key,
-                        cert=args.cert,
-                        use_kerberos=args.use_kerberos,
-                        kdcHost=args.kdcHost,
-                        _do_tls=args._do_tls,
-                        port=args.port,
-                        **authenticate_kwargs
-                    )
-                    authenticate.kerberos_authentication()
+                    try:
+                        authenticate = Authenticate(
+                            domain=domain,
+                            dc_ip=dc_ip,
+                            username=args.username,
+                            password=args.password,
+                            hashes=args.hashes,
+                            aesKey=args.aesKey,
+                            pfx=args.pfx,
+                            pfx_pass=args.pfx_pass,
+                            key=args.key,
+                            cert=args.cert,
+                            use_kerberos=args.use_kerberos,
+                            kdcHost=args.kdcHost,
+                            _do_tls=args._do_tls,
+                            port=args.port,
+                            **authenticate_kwargs
+                        )
+                        authenticate.kerberos_authentication()
+                    except ValueError as e:
+                        logging.error(f"Authentication failed: {e}")
+                        continue
+                    except Exception as e:
+                        logging.error(f"An error occurred when trying to switch user : {e}")
+                        continue
 
                     execute_action_function(args, authenticate)
                 else:

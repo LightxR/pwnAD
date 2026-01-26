@@ -11,18 +11,24 @@ import pwnAD.lib.logger as logger
 def main():
     logger.init()
 
-    options = parser.parseArgs()
+    options, action_parsers = parser.parseArgs()
     if options.debug is True:
         logging.getLogger().setLevel(logging.DEBUG)
     else:
         logging.getLogger().setLevel(logging.INFO)
-    
+
     if options.dc_ip is None:
         return "You need to specify a target with --dc-ip"
 
-    if not options.interactive and (options.action == None or (options.action not in ["query", "getTGT", "getST", "getNThash", "getPFX"] and options.function == None)):
-        logging.error("No action or function has been specified, use --help for more information")
-        sys.exit(-1)
+    # Check if action requires a function
+    if not options.interactive:
+        if options.action is None:
+            logging.error("No action has been specified, use --help for more information")
+            sys.exit(-1)
+        elif options.action in action_parsers and options.function is None:
+            # Action specified but no function - show help for that action
+            action_parsers[options.action].print_help()
+            sys.exit(-1)
 
     authenticate_kwargs = {}
     if options.action == "getTGT":
@@ -41,24 +47,27 @@ def main():
             'force_forwardable' : options.force_forwardable,
             'renew' : options.renew
         }
-        
-    authenticate = Authenticate(
-        domain=options.domain,
-        dc_ip=options.dc_ip,
-        username=options.username,
-        password=options.password,
-        hashes=options.hashes,
-        aesKey=options.aesKey,
-        pfx=options.pfx,
-        pfx_pass=options.pfx_pass,
-        key=options.key,
-        cert=options.cert,
-        use_kerberos=options.use_kerberos,
-        kdcHost=options.kdcHost,
-        _do_tls=options._do_tls,
-        port=options.port,
-        **authenticate_kwargs
-    )
+    try:
+        authenticate = Authenticate(
+            domain=options.domain,
+            dc_ip=options.dc_ip,
+            username=options.username,
+            password=options.password,
+            hashes=options.hashes,
+            aesKey=options.aesKey,
+            pfx=options.pfx,
+            pfx_pass=options.pfx_pass,
+            key=options.key,
+            cert=options.cert,
+            use_kerberos=options.use_kerberos,
+            kdcHost=options.kdcHost,
+            _do_tls=options._do_tls,
+            port=options.port,
+            **authenticate_kwargs
+        )
+    except ValueError as e:
+        logging.error(f"Authentication failed: {e}")
+        return 
 
     if options.action in ["getTGT", "getST", "getNThash", "getPFX"]:
         try:
@@ -67,15 +76,20 @@ def main():
             authenticate.kerberos_authentication()
             logging.debug(f"Executing action : {options.action}")
             execute_action_function(options, authenticate)
-        
+
+        except (ValueError, ConnectionError) as e:
+            logging.error(f"Authentication/Connection error: {e}")
+        except KeyboardInterrupt:
+            logging.info("Operation cancelled by user")
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug(f"Full traceback:", exc_info=True)
         
     
     else:
         logging.debug(f"Trying authentication as {options.username} on {options.dc_ip} ... ")
         try:
-            connection = authenticate.ldap_authentication()        
+            connection = authenticate.ldap_authentication()
             logging.debug("Finishing authentication, starting action now")
 
             if options.interactive:
@@ -83,8 +97,13 @@ def main():
             else:
                 execute_action_function(options, connection)
 
+        except (ValueError, ConnectionError) as e:
+            logging.error(f"Authentication/Connection error: {e}")
+        except KeyboardInterrupt:
+            logging.info("Operation cancelled by user")
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug(f"Full traceback:", exc_info=True)
 
 if __name__ == "__main__":
     main()

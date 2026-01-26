@@ -31,7 +31,19 @@ from pwnAD.commands.getTGT import getTGT
 
 
 def getNThash(auth, is_key_credential=False):
+    """
+    Retrieve NT hash from a certificate via PKINIT and User-to-User (U2U) Kerberos.
 
+    Args:
+        auth: Authenticate object with certificate and key
+        is_key_credential: If True, suppresses output message (used internally)
+
+    Returns:
+        str: NT hash in hexadecimal format, or False on error
+
+    Note:
+        Uses UnPAC-the-hash technique to extract credentials from PAC
+    """
     if not (auth.cert and auth.key):
         return logging.error("getNThash function needs certificate authentication")
     as_rep, cipher, session_key, t_key = getTGT(auth)
