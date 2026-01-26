@@ -151,7 +151,7 @@ Most likely you need TLS. Either:
 1. Verify you have the required permissions
 2. Check group memberships:
    ```bash
-   pwnAD get membership <your_user>
+   pwnAD [auth] get membership <your_user>
    ```
 3. Try with a higher-privileged account
 
@@ -167,7 +167,7 @@ Most likely you need TLS. Either:
 2. Check if using sAMAccountName or DN:
    ```bash
    # Try with full DN
-   pwnAD query "(sAMAccountName=targetuser)" "distinguishedName"
+   pwnAD [auth] query "(sAMAccountName=targetuser)" "distinguishedName"
    ```
 
 ### "Constraint violation"
@@ -219,7 +219,7 @@ sudo timedatectl set-ntp true
 
 2. Check if SPN exists:
    ```bash
-   pwnAD get spn
+   pwnAD [auth] get spn
    ```
 
 ### ccache Issues
@@ -254,7 +254,7 @@ sudo timedatectl set-ntp true
 1. Verify domain functional level is 2016+
 2. Check if attribute exists on target:
    ```bash
-   pwnAD query "(sAMAccountName=target)" "msDS-KeyCredentialLink"
+   pwnAD [auth] query "(sAMAccountName=target)" "msDS-KeyCredentialLink"
    ```
 
 ### PKINIT Fails After Adding Key Credential

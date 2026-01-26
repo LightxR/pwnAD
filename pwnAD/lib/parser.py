@@ -100,11 +100,11 @@ Commands:
 
     epilog = """
 Examples:
-  pwnAD get users -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1
-  pwnAD add computer YOURPC$ pass123 -d corp.local -u user -H :NTHASH --dc-ip DC
-  pwnAD shadow auto targetUser$ -d corp.local -u admin -p pass --dc-ip DC
-  pwnAD getTGT -d corp.local -u user -p pass --dc-ip 10.0.0.1
-  pwnAD -i -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1
+  pwnAD -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1 get users
+  pwnAD -d corp.local -u user -H :NTHASH --dc-ip DC add computer YOURPC$ pass123
+  pwnAD -d corp.local -u admin -p pass --dc-ip DC shadow auto targetUser$
+  pwnAD -d corp.local -u user -p pass --dc-ip 10.0.0.1 getTGT
+  pwnAD -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1 -i
 
 Use 'pwnAD <command> -h' for more information on a specific command."""
 
@@ -680,9 +680,8 @@ Functions:
 def parseArgs():
     parser, all_subparsers, action_parsers = get_parser()
 
+    # Authentication args only on main parser (allows: pwnAD [auth] [action] [function])
     authentication_args(parser)
-    for subparser in all_subparsers:
-        authentication_args(subparser)
 
     if len(sys.argv) == 1:
         parser.print_help()
