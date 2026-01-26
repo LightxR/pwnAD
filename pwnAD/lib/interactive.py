@@ -2,6 +2,7 @@ import logging
 import readline
 import os
 import shlex
+import subprocess
 import sys
 
 import pwnAD.lib.parser as parser
@@ -17,10 +18,10 @@ def infos(conn):
     logging.info(f"Port: \t{conn.port}")
     logging.info(f"Domain: \t{conn.domain}")
     logging.info(f"User: \t{conn.user if conn.use_kerberos == True and conn.ldap_user == None else conn.ldap_user}")
-    logging.info(f"Password: \t{conn.ldap_pass}")
-    logging.info(f"LM_hash: \t{conn.lmhash}")
-    logging.info(f"NT_hash: \t{conn.nthash}")
-    logging.info(f"aesKey: \t{conn.aesKey}")
+    logging.info(f"Password: \t{'[SET]' if conn.ldap_pass else '[NOT SET]'}")
+    logging.info(f"LM_hash: \t{'[SET]' if conn.lmhash else '[NOT SET]'}")
+    logging.info(f"NT_hash: \t{'[SET]' if conn.nthash else '[NOT SET]'}")
+    logging.info(f"aesKey: \t{'[SET]' if conn.aesKey else '[NOT SET]'}")
     logging.info(f"pfx: \t{True if conn.pfx else None}")
     logging.info(f"key: \t{True if (conn.key and not conn.pfx) else None}")
     logging.info(f"cert: \t{True if (conn.cert and not conn.pfx) else None}")
@@ -50,7 +51,10 @@ def start_interactive_mode(conn):
 
             if user_input.startswith('!'):
                 command_to_run = user_input[1:]
-                os.system(command_to_run)
+                try:
+                    subprocess.run(command_to_run, shell=True, check=False)
+                except Exception as e:
+                    logging.error(f"Command execution failed: {e}")
                 continue
 
             user_input_list = shlex.split(user_input)  

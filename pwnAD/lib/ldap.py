@@ -315,37 +315,42 @@ class LDAPConnection:
 
     def _schannel_auth(self, ldap_scheme):
         logging.debug(f"LDAP authentication with SChannel: ldap_scheme = {ldap_scheme} with port {self.port}")
-        self.user = f"{self.domain.upper()}\{self.ldap_user}"
+        self.user = f"{self.domain.upper()}\\{self.ldap_user}"
 
-        if self.pfx:
-            with open(self.pfx, "rb") as f:
-                if self.pfx_pass:
-                    key, cert = load_pfx(f.read(), self.pfx_pass.encode())
-                else:
-                    key, cert = load_pfx(f.read())
+        key_file_name = None
+        cert_file_name = None
 
-            key_file = tempfile.NamedTemporaryFile(delete=False)
-            key_file.write(key_to_pem(key))
-            key_file.close()
+        try:
+            if self.pfx:
+                with open(self.pfx, "rb") as f:
+                    if self.pfx_pass:
+                        key, cert = load_pfx(f.read(), self.pfx_pass.encode())
+                    else:
+                        key, cert = load_pfx(f.read())
 
-            cert_file = tempfile.NamedTemporaryFile(delete=False)
-            cert_file.write(cert_to_pem(cert))
-            cert_file.close()        
-            
-            tls = ldap3.Tls(local_private_key_file=key_file.name, local_certificate_file=cert_file.name, validate=ssl.CERT_NONE)
-        else:
-            tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=ssl.CERT_NONE)
+                key_file = tempfile.NamedTemporaryFile(delete=False)
+                key_file.write(key_to_pem(key))
+                key_file.close()
+                key_file_name = key_file.name
 
-        ldap_server_kwargs = {'use_ssl': self.port == 636,
-                              'port': self.port,
-                              'get_info': ldap3.ALL,
-                              'tls': tls}
+                cert_file = tempfile.NamedTemporaryFile(delete=False)
+                cert_file.write(cert_to_pem(cert))
+                cert_file.close()
+                cert_file_name = cert_file.name
 
-        ldap_server = ldap3.Server(self.target, **ldap_server_kwargs)
+                tls = ldap3.Tls(local_private_key_file=key_file_name, local_certificate_file=cert_file_name, validate=ssl.CERT_NONE)
+            else:
+                tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=ssl.CERT_NONE)
 
-        ldap_connection_kwargs = dict()
+            ldap_server_kwargs = {'use_ssl': self.port == 636,
+                                  'port': self.port,
+                                  'get_info': ldap3.ALL,
+                                  'tls': tls}
 
-        try: 
+            ldap_server = ldap3.Server(self.target, **ldap_server_kwargs)
+
+            ldap_connection_kwargs = dict()
+
             if self.port == 389:
                 logging.debug("testing StartTLS connection")
                 ldap_connection_kwargs = {'authentication': ldap3.SASL,
@@ -357,28 +362,23 @@ class LDAPConnection:
             self._do_tls = True
 
             if self.port == 636:
-
                 ldap_connection.open()
-        except Exception as e:
-            raise e 
-            return
-        
-        who_am_i = ldap_connection.extend.standard.who_am_i()
-        if not who_am_i:
-            logging.critical('Certificate authentication failed')
-            if self.pfx:
-                os.unlink(key_file.name)
-                os.unlink(cert_file.name)
-            raise LDAPAuthenticationError('Certificate authentication failed')
 
-        logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
-        self._ldap_server = ldap_server
-        self._ldap_connection = ldap_connection
+            who_am_i = ldap_connection.extend.standard.who_am_i()
+            if not who_am_i:
+                logging.critical('Certificate authentication failed')
+                raise LDAPAuthenticationError('Certificate authentication failed')
 
+            logging.debug(f"Successfully connected to LDAP server as {who_am_i}")
+            self._ldap_server = ldap_server
+            self._ldap_connection = ldap_connection
 
-        if self.pfx:
-            os.unlink(key_file.name)
-            os.unlink(cert_file.name)
+        finally:
+            # Always cleanup temporary files
+            if key_file_name and os.path.exists(key_file_name):
+                os.unlink(key_file_name)
+            if cert_file_name and os.path.exists(cert_file_name):
+                os.unlink(cert_file_name)
 
     def _simple_auth(self, ldap_scheme):
         logging.debug(f"LDAP authentication with SIMPLE: ldap_scheme = {ldap_scheme}")
@@ -466,11 +466,11 @@ class LDAPConnection:
         return self._ldap_connection.result    
     
     def exists(self, account):
-        self._ldap_connection.search(self._baseDN, '(sAMAccountName=%s)' % account)
+        self._ldap_connection.search(self._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(account))
         return len(self._ldap_connection.entries) ==1
-    
+
     def get(self, user_or_computer):
-        self._ldap_connection.search(self._baseDN, '(sAMAccountName=%s)' % user_or_computer, search_scope=ldap3.SUBTREE)
+        self._ldap_connection.search(self._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(user_or_computer), search_scope=ldap3.SUBTREE)
         return self._ldap_connection.entries[0]
     
     def ldap_get_user(self, accountName):
@@ -532,11 +532,11 @@ class LDAPConnection:
             logging.error(f"No group found with RID '{primary_group_id}'")
 
     def get_samaccountname_from_dn(self, dn, object_class):
-        search_filter = f"(&(objectClass={object_class})(distinguishedName={dn}))"
+        search_filter = f"(&(objectClass={escape_filter_chars(object_class)})(distinguishedName={escape_filter_chars(dn)}))"
 
-        self._ldap_connection.search(search_base=self._baseDN, 
-                                    search_filter=search_filter, 
-                                    search_scope=ldap3.SUBTREE, 
+        self._ldap_connection.search(search_base=self._baseDN,
+                                    search_filter=search_filter,
+                                    search_scope=ldap3.SUBTREE,
                                     attributes=['samaccountname'])
         
         if self._ldap_connection.entries:
@@ -545,11 +545,11 @@ class LDAPConnection:
             logging.error(f"No sAMAccountName found for DN '{dn}'")
 
     def get_samaccountname_from_sid(self, sid):
-        search_filter = f"(objectSid={sid})"
+        search_filter = f"(objectSid={escape_filter_chars(sid)})"
 
-        self._ldap_connection.search(search_base=self._baseDN, 
-                                    search_filter=search_filter, 
-                                    search_scope=ldap3.SUBTREE, 
+        self._ldap_connection.search(search_base=self._baseDN,
+                                    search_filter=search_filter,
+                                    search_scope=ldap3.SUBTREE,
                                     attributes=['samaccountname'])
         
         if self._ldap_connection.entries:
@@ -558,11 +558,11 @@ class LDAPConnection:
             logging.error(f"No sAMAccountName found for SID '{sid}'")
 
     def get_dn_from_samaccountname(self, samaccountname, object_class):
-        search_filter = f"(&(objectClass={object_class})(sAMAccountName={samaccountname}))"
+        search_filter = f"(&(objectClass={escape_filter_chars(object_class)})(sAMAccountName={escape_filter_chars(samaccountname)}))"
 
-        self._ldap_connection.search(search_base=self._baseDN, 
-                                    search_filter=search_filter, 
-                                    search_scope=ldap3.SUBTREE, 
+        self._ldap_connection.search(search_base=self._baseDN,
+                                    search_filter=search_filter,
+                                    search_scope=ldap3.SUBTREE,
                                     attributes=['distinguishedName'])
         
         if self._ldap_connection.entries:
@@ -571,11 +571,11 @@ class LDAPConnection:
             logging.error(f"No DN found for sAMAccountName '{samaccountname}'")
     
     def get_dn_from_displayname(self, display_name, object_class):
-        search_filter = f"(&(objectClass={object_class})(displayName={display_name}))"
+        search_filter = f"(&(objectClass={escape_filter_chars(object_class)})(displayName={escape_filter_chars(display_name)}))"
 
-        self._ldap_connection.search(search_base=self._baseDN, 
-                                    search_filter=search_filter, 
-                                    search_scope=ldap3.SUBTREE, 
+        self._ldap_connection.search(search_base=self._baseDN,
+                                    search_filter=search_filter,
+                                    search_scope=ldap3.SUBTREE,
                                     attributes=['distinguishedName'])
         
         if self._ldap_connection.entries:
@@ -584,7 +584,7 @@ class LDAPConnection:
             logging.error(f"No DN found for displayName '{display_name}'")
 
     def get_dn_from_sid(self, sid):
-        search_filter = f"(objectSid={sid})"
+        search_filter = f"(objectSid={escape_filter_chars(sid)})"
 
         self._ldap_connection.search(search_base=self._baseDN,
                                     search_filter=search_filter,

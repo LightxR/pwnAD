@@ -70,15 +70,20 @@ def main():
             authenticate.kerberos_authentication()
             logging.debug(f"Executing action : {options.action}")
             execute_action_function(options, authenticate)
-        
+
+        except (ValueError, ConnectionError) as e:
+            logging.error(f"Authentication/Connection error: {e}")
+        except KeyboardInterrupt:
+            logging.info("Operation cancelled by user")
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug(f"Full traceback:", exc_info=True)
         
     
     else:
         logging.debug(f"Trying authentication as {options.username} on {options.dc_ip} ... ")
         try:
-            connection = authenticate.ldap_authentication()        
+            connection = authenticate.ldap_authentication()
             logging.debug("Finishing authentication, starting action now")
 
             if options.interactive:
@@ -86,8 +91,13 @@ def main():
             else:
                 execute_action_function(options, connection)
 
+        except (ValueError, ConnectionError) as e:
+            logging.error(f"Authentication/Connection error: {e}")
+        except KeyboardInterrupt:
+            logging.info("Operation cancelled by user")
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug(f"Full traceback:", exc_info=True)
 
 if __name__ == "__main__":
     main()

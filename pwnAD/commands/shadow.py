@@ -191,7 +191,7 @@ def auto(conn, target):
     if result is True:
         logging.info(f"Successfully restored the old Key Credentials for {target}")
 
-    logging.info(f"NT hash for {target}, {authenticate.nthash}")
+    logging.info(f"NT hash for {target}: {authenticate.nthash}")
 
     return authenticate.nthash
 

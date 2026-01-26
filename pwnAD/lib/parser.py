@@ -1,43 +1,158 @@
 import argparse
 import sys
+import re
 from impacket.krb5 import constants
 
 
+class PwnADHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Custom help formatter for pwnAD with clean grouped commands display."""
+
+    def __init__(self, prog, indent_increment=2, max_help_position=36, width=100):
+        super().__init__(prog, indent_increment, max_help_position, width)
+
+    def _metavar_formatter(self, action, default_metavar):
+        # Suppress subparsers choices display in usage line
+        if isinstance(action, argparse._SubParsersAction):
+            def format(tuple_size):
+                return '<command>' if tuple_size == 1 else ('<command>',) * tuple_size
+            return format
+        return super()._metavar_formatter(action, default_metavar)
+
+    def _format_action(self, action):
+        # Skip the subparsers action entirely - we show commands in description
+        if isinstance(action, argparse._SubParsersAction):
+            return ''
+        return super()._format_action(action)
+
+
+class PwnADArgumentParser(argparse.ArgumentParser):
+    """Custom ArgumentParser that shows formatted help on errors."""
+
+    def error(self, message):
+        """Override error to show help instead of ugly error message."""
+        sys.stderr.write(f'\n\033[91m[-] Error: {self._clean_error_message(message)}\033[0m\n\n')
+        self.print_help(sys.stderr)
+        sys.exit(2)
+
+    def _clean_error_message(self, message):
+        """Clean up error message for better readability."""
+        # Simplify "invalid choice" messages
+        if 'invalid choice:' in message:
+            match = re.search(r"invalid choice: '([^']+)'", message)
+            if match:
+                invalid_value = match.group(1)
+                return f"'{invalid_value}' is not a valid command. See available commands below."
+        # Simplify "required" messages
+        if 'required:' in message:
+            return message.replace('the following arguments are required:', 'missing required argument(s):')
+        return message
+
+
 def authentication_args(parser):
-    authconn = parser.add_argument_group("Authentication & connection")
-    authconn.add_argument("--dc-ip", action="store", metavar="ip address", help="IP Address of the domain controller or KDC (Key Distribution Center) for Kerberos. If omitted it will use the domain part (FQDN) specified in the identity parameter")
-    authconn.add_argument("--kdcHost", dest="kdcHost", action="store", metavar="FQDN KDC", help="FQDN of KDC for Kerberos.")
-    authconn.add_argument("-d", "--domain", dest="domain", metavar="DOMAIN", action="store", help="(FQDN) domain to authenticate to")
-    authconn.add_argument("-u", "--user", dest="username", metavar="USER", action="store", help="user to authenticate with")
-    authconn.add_argument("--port", dest="port", metavar="PORT", action="store", type=int, help="ldap port to authenticate on")
-    authconn.add_argument("--tls", dest="_do_tls", action="store_true", default=None, help="Using TLS connection")
-    
-    secret = parser.add_argument_group()
-    cred = secret.add_mutually_exclusive_group()
-    cred.add_argument("-p", "--password", dest="password", metavar="PASSWORD", action="store", help="password to authenticate with")
-    cred.add_argument("-H", "--hashes", dest="hashes", action="store", metavar="[LMHASH:]NTHASH", help="NT/LM hashes, format is LMhash:NThash")
-    cred.add_argument("--aes-key", dest="aesKey", action="store", metavar="hex key", help="AES key to use for Kerberos Authentication (128 or 256 bits)")
-    secret.add_argument("-k", "--kerberos", dest="use_kerberos", action="store_true", help="Use Kerberos authentication. Grabs credentials from .ccache file (KRB5CCNAME) based on target parameters. If valid credentials cannot be found, it will use the ones specified in the command line")
+    conn = parser.add_argument_group("Connection")
+    conn.add_argument("--dc-ip", action="store", metavar="IP", help="Domain Controller IP address")
+    conn.add_argument("--kdcHost", dest="kdcHost", action="store", metavar="FQDN", help="KDC hostname (for Kerberos)")
+    conn.add_argument("-d", "--domain", dest="domain", metavar="DOMAIN", action="store", help="Target domain (FQDN)")
+    conn.add_argument("-u", "--user", dest="username", metavar="USER", action="store", help="Username")
+    conn.add_argument("--port", dest="port", metavar="PORT", action="store", type=int, help="LDAP port")
+    conn.add_argument("--tls", dest="_do_tls", action="store_true", default=None, help="Use LDAPS/TLS")
 
-    authcert = parser.add_argument_group("Certificate authentication")
-    authcert.add_argument("-pfx", dest="pfx", action="store", metavar="PFX", help="pfx/p12 file for certificate authentication")
-    authcert.add_argument("-pfx-pass", dest="pfx_pass", action="store", metavar="pfx password", default=None, help="password for pfx/p12 file")
-    authcert.add_argument("-key", dest="key", action="store", metavar="key", help=".key file for certificate authentication")
-    authcert.add_argument("-cert", dest="cert", action="store", metavar="cert", help=".crt file for certificate authentication")
+    creds = parser.add_argument_group("Credentials")
+    cred_mutex = creds.add_mutually_exclusive_group()
+    cred_mutex.add_argument("-p", "--password", dest="password", metavar="PASS", action="store", help="Password")
+    cred_mutex.add_argument("-H", "--hashes", dest="hashes", action="store", metavar="[LM:]NT", help="NTLM hash (LMhash:NThash or :NThash)")
+    cred_mutex.add_argument("--aes-key", dest="aesKey", action="store", metavar="KEY", help="AES128/256 key for Kerberos")
+    creds.add_argument("-k", "--kerberos", dest="use_kerberos", action="store_true", help="Use Kerberos auth (ccache from KRB5CCNAME)")
 
-    parser.add_argument("--debug", action="store_true", help="Debug mode")
-    parser.add_argument("-i", "--interactive", dest="interactive", action="store_true", default=None, help="Spawning an interactive shell")
+    cert = parser.add_argument_group("Certificate Auth")
+    cert.add_argument("-pfx", dest="pfx", action="store", metavar="FILE", help="PFX/P12 certificate file")
+    cert.add_argument("-pfx-pass", dest="pfx_pass", action="store", metavar="PASS", default=None, help="PFX password")
+    cert.add_argument("-key", dest="key", action="store", metavar="FILE", help="Private key file (.key)")
+    cert.add_argument("-cert", dest="cert", action="store", metavar="FILE", help="Certificate file (.crt)")
+
+    parser.add_argument("--debug", action="store_true", help="Enable debug output")
+    parser.add_argument("-i", "--interactive", dest="interactive", action="store_true", default=None, help="Start interactive shell")
 
 
 def get_parser(interactive=False):
     all_subparsers = []
-    parser = argparse.ArgumentParser(add_help=True, description="pwnAD commands")
-    # Create a subparser for each action
-    subparsers = parser.add_subparsers(dest="action", help="Available actions")
+
+    description = """
+Active Directory exploitation tool for LDAP and Kerberos protocols.
+
+Commands:
+  LDAP Actions:
+    add                 Add objects, ACEs, or attributes
+    remove              Remove objects, ACEs, or attributes
+    get                 Query objects and enumerate information
+    modify              Modify object attributes
+    query               Execute raw LDAP queries
+
+  Modules:
+    shadow              Shadow Credentials attack (msDS-KeyCredentialLink)
+    dacl                DACL operations (read, write, backup, restore)
+
+  Kerberos:
+    getTGT              Request TGT (AS-REQ)
+    getST               Request ST via S4U2Self/S4U2Proxy
+    getNThash           Extract NT hash via U2U PKINIT"""
+
+    epilog = """
+Examples:
+  pwnAD get users -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1
+  pwnAD add computer YOURPC$ pass123 -d corp.local -u user -H :NTHASH --dc-ip DC
+  pwnAD shadow auto targetUser$ -d corp.local -u admin -p pass --dc-ip DC
+  pwnAD getTGT -d corp.local -u user -p pass --dc-ip 10.0.0.1
+  pwnAD -i -d corp.local -u admin -p 'P@ss' --dc-ip 10.0.0.1
+
+Use 'pwnAD <command> -h' for more information on a specific command."""
+
+    if interactive:
+        description += """
+
+  Session:
+    switch_user         Re-authenticate as a different user
+    infos               Display current session information
+    rebind              Reconnect after timeout
+    start_tls           Upgrade connection to TLS"""
+        epilog = ""
+
+    parser = PwnADArgumentParser(
+        prog='pwnAD',
+        description=description,
+        epilog=epilog,
+        formatter_class=PwnADHelpFormatter,
+        add_help=True
+    )
+
+    # Create subparsers (hidden from main help, shown in description)
+    subparsers = parser.add_subparsers(
+        dest="action",
+        metavar="<command>",
+        parser_class=PwnADArgumentParser
+    )
+
+    # ═══════════════════════════════════════════════════════════════════
+    # LDAP Actions
+    # ═══════════════════════════════════════════════════════════════════
 
     # ADD action
-    parser_add = subparsers.add_parser('add', help='Perform ADD related actions')
-    add_subparsers = parser_add.add_subparsers(dest="function", help="LDAP functions")
+    add_description = """
+Add objects, ACEs, or attributes to Active Directory.
+
+Functions:
+  Objects:       user, computer
+  ACEs:          dcsync, genericAll, write_gpo_dacl, RBCD
+  Membership:    groupMember
+  Attributes:    uac, attribute, dnsRecord"""
+
+    parser_add = subparsers.add_parser(
+        'add',
+        help='Add objects, ACEs, or attributes',
+        description=add_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    add_subparsers = parser_add.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_add)
 
     # ADD specific functions
@@ -102,8 +217,22 @@ def get_parser(interactive=False):
 
 
     # REMOVE action
-    parser_remove = subparsers.add_parser('remove', help='Perform REMOVE related actions')
-    remove_subparsers = parser_remove.add_subparsers(dest="function", help="LDAP functions")
+    remove_description = """
+Remove objects, ACEs, or attributes from Active Directory.
+
+Functions:
+  Objects:       user, computer, object
+  ACEs:          dcsync, genericAll, RBCD
+  Membership:    groupMember
+  Attributes:    uac, attribute, dnsRecord"""
+
+    parser_remove = subparsers.add_parser(
+        'remove',
+        help='Remove objects, ACEs, or attributes',
+        description=remove_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    remove_subparsers = parser_remove.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_remove)
 
     # REMOVE specific functions 
@@ -158,98 +287,127 @@ def get_parser(interactive=False):
     all_subparsers.append(remove_object_parser)
 
     # GET action
-    parser_get = subparsers.add_parser('get', help='Perform GET related actions')
-    get_subparsers = parser_get.add_subparsers(dest="function", help="LDAP functions")
+    get_description = """
+Query and enumerate Active Directory objects.
+
+Functions:
+  Objects:
+    user, users, computers, groups, DC, servers, CA, OU, containers, object, attribute
+
+  Membership:
+    members, membership
+
+  Delegation:
+    constrained_delegation, unconstrained_delegation, RBCD, not_trusted_for_delegation
+
+  Kerberos Attacks:
+    asreproastables, kerberoastables, spn
+
+  Credentials:
+    laps, gmsa
+
+  Miscellaneous:
+    owner, machine_quota, writable, protected_users, users_description,
+    passwords_dont_expire, users_with_admin_count, accounts_with_sid_histoy,
+    password_not_required"""
+
+    parser_get = subparsers.add_parser(
+        'get',
+        help='Query objects and enumerate information',
+        description=get_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    get_subparsers = parser_get.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_get)
 
     # GET specific functions
-    get_user_parser = get_subparsers.add_parser('user', help="Retreive user account information")
+    get_user_parser = get_subparsers.add_parser('user', help="Get user account information")
     get_user_parser.add_argument("account", action="store", help="Account you want information on")
     all_subparsers.append(get_user_parser)
 
-    get_users_parser = get_subparsers.add_parser('users', help="Retreive all domain users")
+    get_users_parser = get_subparsers.add_parser('users', help="Retrieve all domain users")
     all_subparsers.append(get_users_parser)
 
-    get_members_parser = get_subparsers.add_parser('members', help="Retreive all members from a group")
+    get_members_parser = get_subparsers.add_parser('members', help="Retrieve all members from a group")
     get_members_parser.add_argument("group", action="store", help="Group you want to know the members")
     all_subparsers.append(get_members_parser)
     
-    get_membership_parser = get_subparsers.add_parser('membership', help="Retreive all groups membership for a specified account")
+    get_membership_parser = get_subparsers.add_parser('membership', help="Retrieve all groups membership for a specified account")
     get_membership_parser.add_argument("account", action="store", help="Account you want to know group memberships")
     get_membership_parser.add_argument("-r", "--recurse", action="store_true", help="Perform recursive search for membership (depth up to 5)")
     all_subparsers.append(get_membership_parser)
 
-    get_computers_parser = get_subparsers.add_parser('computers', help="Retreive computers")
+    get_computers_parser = get_subparsers.add_parser('computers', help="Retrieve computers")
     all_subparsers.append(get_computers_parser)
 
-    get_DC_parser = get_subparsers.add_parser('DC', help="Retreive domain controllers")
+    get_DC_parser = get_subparsers.add_parser('DC', help="Retrieve domain controllers")
     all_subparsers.append(get_DC_parser)
 
-    get_servers_parser = get_subparsers.add_parser('servers', help="Retreive servers")
+    get_servers_parser = get_subparsers.add_parser('servers', help="Retrieve servers")
     all_subparsers.append(get_servers_parser)
 
-    get_CA_parser = get_subparsers.add_parser('CA', help="Retreive Certificate Authority")
+    get_CA_parser = get_subparsers.add_parser('CA', help="Retrieve Certificate Authority")
     all_subparsers.append(get_CA_parser)
 
-    get_OU_parser = get_subparsers.add_parser('OU', help="Retreive OU from the domain")
+    get_OU_parser = get_subparsers.add_parser('OU', help="Retrieve OU from the domain")
     all_subparsers.append(get_OU_parser)
 
-    get_containers_parser = get_subparsers.add_parser('containers', help="Retreive containers from the domain")
+    get_containers_parser = get_subparsers.add_parser('containers', help="Retrieve containers from the domain")
     all_subparsers.append(get_containers_parser)
 
-    get_spn_parser = get_subparsers.add_parser('spn', help="Retreive all accounts with spn")
+    get_spn_parser = get_subparsers.add_parser('spn', help="Retrieve all accounts with spn")
     all_subparsers.append(get_spn_parser)
 
-    get_constrained_delegation_parser = get_subparsers.add_parser('constrained_delegation', help="Retreive accounts with constrained delegation enabled")
+    get_constrained_delegation_parser = get_subparsers.add_parser('constrained_delegation', help="Retrieve accounts with constrained delegation enabled")
     all_subparsers.append(get_constrained_delegation_parser)
 
-    get_unconstrained_delegation_parser = get_subparsers.add_parser('unconstrained_delegation', help="Retreive accounts with unconstrained delegation enabled")
+    get_unconstrained_delegation_parser = get_subparsers.add_parser('unconstrained_delegation', help="Retrieve accounts with unconstrained delegation enabled")
     all_subparsers.append(get_unconstrained_delegation_parser)
 
-    get_rbcd_parser = get_subparsers.add_parser('RBCD', help="Retreive accounts with RBCD enabled")
+    get_rbcd_parser = get_subparsers.add_parser('RBCD', help="Retrieve accounts with RBCD enabled")
     all_subparsers.append(get_rbcd_parser)
 
-    get_not_trusted_for_delegation_parser = get_subparsers.add_parser('not_trusted_for_delegation', help="Retreive accounts not trusted for delegation")
+    get_not_trusted_for_delegation_parser = get_subparsers.add_parser('not_trusted_for_delegation', help="Retrieve accounts not trusted for delegation")
     all_subparsers.append(get_not_trusted_for_delegation_parser)
 
-    get_asreproastables_parser = get_subparsers.add_parser('asreproastables', help="Retreive asreproastables accounts")
+    get_asreproastables_parser = get_subparsers.add_parser('asreproastables', help="Retrieve asreproastables accounts")
     all_subparsers.append(get_asreproastables_parser)
 
-    get_kerberoastables_parser = get_subparsers.add_parser('kerberoastables', help="Retreive kerberoastable accounts")
+    get_kerberoastables_parser = get_subparsers.add_parser('kerberoastables', help="Retrieve kerberoastable accounts")
     all_subparsers.append(get_kerberoastables_parser)
 
-    get_password_not_required_parser = get_subparsers.add_parser('password_not_required', help="Retreive accounts with PASSWD_NOTREQD set")
+    get_password_not_required_parser = get_subparsers.add_parser('password_not_required', help="Retrieve accounts with PASSWD_NOTREQD set")
     all_subparsers.append(get_password_not_required_parser)
 
-    get_user_parser = get_subparsers.add_parser('groups', help="Retreive user account information")
+    get_user_parser = get_subparsers.add_parser('groups', help="Retrieve user account information")
     all_subparsers.append(get_user_parser)
 
-    get_groups_parser = get_subparsers.add_parser('protected_users', help="Retreive all groups from domain")
+    get_groups_parser = get_subparsers.add_parser('protected_users', help="Retrieve all groups from domain")
     all_subparsers.append(get_groups_parser)
 
-    get_users_description_parser = get_subparsers.add_parser('users_description', help="Retreive all user accounts with description")
+    get_users_description_parser = get_subparsers.add_parser('users_description', help="Retrieve all user accounts with description")
     all_subparsers.append(get_users_description_parser)
 
-    get_passwords_dont_expire_parser = get_subparsers.add_parser('passwords_dont_expire', help="Retreive accounts with UserAccountControl set to DONT_EXPIRE_PASSWD")
+    get_passwords_dont_expire_parser = get_subparsers.add_parser('passwords_dont_expire', help="Retrieve accounts with UserAccountControl set to DONT_EXPIRE_PASSWD")
     all_subparsers.append(get_passwords_dont_expire_parser)
 
-    get_users_with_admin_count_parser = get_subparsers.add_parser('users_with_admin_count', help="Retreive account with attribute adminaccount=1")
+    get_users_with_admin_count_parser = get_subparsers.add_parser('users_with_admin_count', help="Retrieve account with attribute adminaccount=1")
     all_subparsers.append(get_users_with_admin_count_parser)
 
-    get_accounts_with_sid_histoy_parser = get_subparsers.add_parser('accounts_with_sid_histoy', help="Retreive accounts with SID history")
+    get_accounts_with_sid_histoy_parser = get_subparsers.add_parser('accounts_with_sid_histoy', help="Retrieve accounts with SID history")
     all_subparsers.append(get_accounts_with_sid_histoy_parser)
 
     get_owner_parser = get_subparsers.add_parser('owner', help="Get the owner of a specified object")
     get_owner_parser.add_argument("target", action="store", help="Object you want to known the owner")
     all_subparsers.append(get_owner_parser)
 
-    get_machine_quota_parser = get_subparsers.add_parser('machine_quota', help="Retreive machine_quota from domain")
+    get_machine_quota_parser = get_subparsers.add_parser('machine_quota', help="Retrieve machine_quota from domain")
     all_subparsers.append(get_machine_quota_parser)
 
-    get_laps_parser = get_subparsers.add_parser('laps', help="Retreive laps passwords")
+    get_laps_parser = get_subparsers.add_parser('laps', help="Retrieve laps passwords")
     all_subparsers.append(get_laps_parser)
 
-    get_gmsa_parser = get_subparsers.add_parser('gmsa', help="Retreive gmsa passwords")
+    get_gmsa_parser = get_subparsers.add_parser('gmsa', help="Retrieve gmsa passwords")
     all_subparsers.append(get_gmsa_parser)
 
     get_writable_parser = get_subparsers.add_parser('writable', help="Retrieve objects writable by the current user")
@@ -274,8 +432,21 @@ def get_parser(interactive=False):
     all_subparsers.append(get_attribute_parser)
 
     # MODIFY action
-    parser_modify = subparsers.add_parser('modify', help='Perform MODIFY related actions')
-    modify_subparsers = parser_modify.add_subparsers(dest="function", help="LDAP functions")
+    modify_description = """
+Modify Active Directory object attributes.
+
+Functions:
+  Credentials:   password
+  Properties:    owner, computer_name, dontreqpreauth, attribute
+  Account:       disable_account, enable_account"""
+
+    parser_modify = subparsers.add_parser(
+        'modify',
+        help='Modify object attributes',
+        description=modify_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    modify_subparsers = parser_modify.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_modify)
     
     # MODIFY specific functions
@@ -317,15 +488,35 @@ def get_parser(interactive=False):
 
 
     # QUERY action
-    parser_query = subparsers.add_parser('query', help='Perform QUERY related actions')
+    parser_query = subparsers.add_parser('query', help='Execute custom LDAP query')
     parser_query.add_argument("search_filter", action="store", help="Filter to be applied on LDAP query")
     parser_query.add_argument("attributes", action="store", help="Attributes to be applied on LDAP query")
     all_subparsers.append(parser_query)
 
+    # ═══════════════════════════════════════════════════════════════════
+    # Special Modules
+    # ═══════════════════════════════════════════════════════════════════
 
     # SHADOW action
-    parser_shadow = subparsers.add_parser('shadow', help='Perform shadow credentials related actions')
-    shadow_subparsers = parser_shadow.add_subparsers(dest="function", help="Abuse Shadow Credentials for account takeover")
+    shadow_description = """
+Shadow Credentials attack via msDS-KeyCredentialLink attribute.
+Abuses PKINIT to authenticate and retrieve NT hash/TGT.
+
+Functions:
+  auto      Full attack: add KeyCredential, get NT hash + TGT, restore
+  add       Add a KeyCredential to target
+  list      List all KeyCredentials on target
+  info      Show KeyCredential details by Device ID
+  remove    Remove specific KeyCredential by Device ID
+  clear     Remove all KeyCredentials from target"""
+
+    parser_shadow = subparsers.add_parser(
+        'shadow',
+        help='Shadow Credentials attacks',
+        description=shadow_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    shadow_subparsers = parser_shadow.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_shadow)
     
     # SHADOW specific functions
@@ -357,8 +548,23 @@ def get_parser(interactive=False):
 
 
     # DACL action
-    parser_dacl = subparsers.add_parser('dacl', help='Perform DACL manipulation (read, write, remove, backup, restore)')
-    dacl_subparsers = parser_dacl.add_subparsers(dest="function", help="DACL functions")
+    dacl_description = """
+Discretionary Access Control List (DACL) manipulation.
+
+Functions:
+  read      Read and display DACL of an object
+  write     Add an ACE to the DACL
+  remove    Remove ACEs from the DACL
+  backup    Export DACL to JSON file
+  restore   Restore DACL from JSON backup"""
+
+    parser_dacl = subparsers.add_parser(
+        'dacl',
+        help='DACL manipulation (ACL/ACE)',
+        description=dacl_description,
+        formatter_class=PwnADHelpFormatter
+    )
+    dacl_subparsers = parser_dacl.add_subparsers(dest="function", metavar="<function>", parser_class=PwnADArgumentParser)
     all_subparsers.append(parser_dacl)
 
     # Available rights for --right argument
@@ -403,16 +609,19 @@ def get_parser(interactive=False):
     dacl_restore_parser.add_argument("backup_file", action="store", help="Path to the backup JSON file")
     all_subparsers.append(dacl_restore_parser)
 
+    # ═══════════════════════════════════════════════════════════════════
+    # Kerberos Actions
+    # ═══════════════════════════════════════════════════════════════════
 
     # getTGT action
-    parser_gettgt = subparsers.add_parser('getTGT', help='Perform getTGT related actions')
+    parser_gettgt = subparsers.add_parser('getTGT', help='Request a Ticket Granting Ticket')
     parser_gettgt.add_argument('-principalType', nargs="?", type=lambda value: constants.PrincipalNameType[value.upper()] if value.upper() in constants.PrincipalNameType.__members__ else None,  action='store', default=constants.PrincipalNameType.NT_PRINCIPAL, help='PrincipalType of the token, can be one of  NT_UNKNOWN, NT_PRINCIPAL, NT_SRV_INST, NT_SRV_HST, NT_SRV_XHST, NT_UID, NT_SMTP_NAME, NT_ENTERPRISE, NT_WELLKNOWN, NT_SRV_HST_DOMAIN, NT_MS_PRINCIPAL, NT_MS_PRINCIPAL_AND_ID, NT_ENT_PRINCIPAL_AND_ID; default is NT_PRINCIPAL, ')
     parser_gettgt.add_argument("-spn", dest="spn", metavar="SPN", action="store", help="Request a Service Ticket directly through")
     all_subparsers.append(parser_gettgt)
 
 
     # getST action
-    parser_getst = subparsers.add_parser('getST', help='Perform getST related actions')
+    parser_getst = subparsers.add_parser('getST', help='Request a Service Ticket (S4U)')
     parser_getst.add_argument('-spn', action="store", help='SPN (service/server) of the target service the service ticket will be generated for')
     parser_getst.add_argument('-altservice', action="store", help='New sname/SPN to set in the ticket')
     parser_getst.add_argument('-impersonate', action="store", help='target username that will be impersonated (thru S4U2Self)'
@@ -431,7 +640,7 @@ def get_parser(interactive=False):
 
 
     # getNThash action
-    parser_getnthash = subparsers.add_parser('getNThash', help='Perform getNThash related actions')
+    parser_getnthash = subparsers.add_parser('getNThash', help='Retrieve NT hash via PKINIT (U2U)')
     all_subparsers.append(parser_getnthash)
 
 
@@ -446,14 +655,18 @@ def get_parser(interactive=False):
         authentication_args(parser_getnthash)
         # authentication_args(parser_getpfx)
 
-        parser_switch = subparsers.add_parser('switch_user', help='Switch user from current interactive session')
+        # ═══════════════════════════════════════════════════════════════════
+        # Interactive Session
+        # ═══════════════════════════════════════════════════════════════════
+
+        parser_switch = subparsers.add_parser('switch_user', help='Switch to a different user')
         authentication_args(parser_switch)
 
-        parser_infos = subparsers.add_parser('infos', help='Print informations about the current interactive session')
+        parser_infos = subparsers.add_parser('infos', help='Display current session information')
 
-        parser_rebind = subparsers.add_parser('rebind', help='Try to rebind the current session (when you get errors due to timeout)')
+        parser_rebind = subparsers.add_parser('rebind', help='Rebind session (after timeout)')
 
-        parser_start_tls = subparsers.add_parser('start_tls', help='Perform startTLS operation to initiate a TLS connection')
+        parser_start_tls = subparsers.add_parser('start_tls', help='Initiate TLS connection')
 
     return parser, all_subparsers
 

@@ -35,51 +35,7 @@ from pwnAD.lib.accesscontrol import (
     resolve_sid_to_name,
     get_rights_from_mask,
 )
-from pwnAD.lib.utils import check_error
-
-
-def _resolve_target(conn, target):
-    """
-    Resolve a target identifier to its DN.
-
-    Args:
-        conn: LDAP connection object
-        target: Target identifier (sAMAccountName, SID, or DN)
-
-    Returns:
-        str: Distinguished Name of the target, or None if not found
-    """
-    # Check if already a DN
-    if target.lower().startswith("cn=") or target.lower().startswith("dc="):
-        return target
-
-    # Check if it's a SID
-    if target.upper().startswith("S-1-"):
-        dn = conn.get_dn_from_sid(target)
-        if dn:
-            return dn
-        logging.error(f"Could not find object with SID: {target}")
-        return None
-
-    # Assume it's a sAMAccountName - try multiple object classes
-    for obj_class in ['*', 'user', 'computer', 'group']:
-        if obj_class == '*':
-            search_filter = f"(sAMAccountName={escape_filter_chars(target)})"
-        else:
-            search_filter = f"(&(objectClass={obj_class})(sAMAccountName={escape_filter_chars(target)}))"
-
-        conn.search(
-            conn._baseDN,
-            search_filter,
-            search_scope=ldap3.SUBTREE,
-            attributes=['distinguishedName']
-        )
-
-        if conn._ldap_connection.entries:
-            return conn._ldap_connection.entries[0].distinguishedName.value
-
-    logging.error(f"Could not find object: {target}")
-    return None
+from pwnAD.lib.utils import check_error, resolve_target as _resolve_target
 
 
 def _resolve_principal(conn, principal):

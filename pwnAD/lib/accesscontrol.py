@@ -225,6 +225,13 @@ ACCOUNT_FLAGS = {
     "USE_AES_KEYS": 0x8000000,
 }
 
+# Common userAccountControl combinations
+UAC_NORMAL_ACCOUNT = 0x200  # NORMAL_ACCOUNT (512)
+UAC_WORKSTATION_TRUST = 0x1000  # WORKSTATION_TRUST_ACCOUNT (4096) - for computer accounts
+UAC_NORMAL_ACCOUNT_ENABLED = 0x200 | 0x0  # Normal account, enabled (512)
+UAC_NORMAL_ACCOUNT_DISABLED = 0x200 | 0x02  # Normal account, disabled (514)
+UAC_NORMAL_ACCOUNT_DONT_EXPIRE = 0x200 | 0x10000  # Normal + password never expires (66048)
+
 
 def create_allow_ace(sid, object_type=None, access_mask=ACCESS_FLAGS["FULL_CONTROL"], inheritance=False):
     nace = ldaptypes.ACE()

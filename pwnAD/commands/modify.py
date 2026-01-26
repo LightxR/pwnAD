@@ -28,7 +28,7 @@ def password(conn, account, new_password):
 
     try:
         conn.modify(targetDN, {'unicodePwd': [(ldap3.MODIFY_REPLACE, ['"{}"'.format(new_password).encode('utf-16-le')])]})
-        logging.info("Successfully changed %s password to: %s" % (account, new_password))
+        logging.info("Successfully changed password for %s" % account)
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)

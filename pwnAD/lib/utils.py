@@ -143,7 +143,7 @@ def parse_lm_nt_hashes(lm_nt_hashes_string):
     return lm_hash_value, nt_hash_value
 
 def nt_hash(data):
-    if type(data) == str:
+    if isinstance(data, str):
         data = bytes(data, 'utf-16-le')
 
     ctx = hashlib.new('md4', data)

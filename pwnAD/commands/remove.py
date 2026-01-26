@@ -46,7 +46,6 @@ def user(conn, user_name):
         user_name: sAMAccountName of the user to delete
     """
     res = conn.exists(user_name)
-    print(res)
     if not res:
         logging.error("Account %s not found in %s!" % (user_name, conn._baseDN))
         return

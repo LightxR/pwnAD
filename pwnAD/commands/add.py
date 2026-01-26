@@ -9,7 +9,10 @@ from ldap3 import MODIFY_REPLACE, MODIFY_ADD, BASE
 from ldap3.utils.conv import escape_filter_chars
 from ldap3.protocol.microsoft import security_descriptor_control
 
-from pwnAD.lib.accesscontrol import *
+from pwnAD.lib.accesscontrol import (
+    ACCESS_FLAGS, ACCOUNT_FLAGS, UAC_WORKSTATION_TRUST, UAC_NORMAL_ACCOUNT_ENABLED,
+    create_allow_ace, create_empty_sd
+)
 from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_serial
 
@@ -47,7 +50,7 @@ def computer(conn, new_computer=None, new_password=None):
     ]
     ucd = {
         'dnsHostName': '%s.%s' % (computer_hostname, conn.domain),
-        'userAccountControl': 4096,
+        'userAccountControl': UAC_WORKSTATION_TRUST,
         'servicePrincipalName': spns,
         'sAMAccountName': new_computer,
         'unicodePwd': '"{}"'.format(new_password).encode('utf-16-le')
@@ -61,7 +64,7 @@ def computer(conn, new_computer=None, new_password=None):
             return
         else:
             conn.add(newComputerDn.decode('utf-8'), ['top','person','organizationalPerson','user','computer'], ucd)
-            logging.info('Adding new computer with username: %s and password: %s result: OK' % (new_computer, new_password))
+            logging.info('Successfully added computer: %s' % new_computer)
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -89,7 +92,7 @@ def user(conn, new_user, new_password, OU=None):
         "objectClass": ["top", "person", "organizationalPerson", "user"],
         "distinguishedName": user_dn,
         "sAMAccountName": new_user,
-        "userAccountControl": 544,
+        "userAccountControl": UAC_NORMAL_ACCOUNT_ENABLED,
         "unicodePwd": password_value
     }
     logging.debug("Trying to add the new user")
