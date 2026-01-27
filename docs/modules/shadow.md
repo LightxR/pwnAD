@@ -195,13 +195,13 @@ Always clean up after testing:
 
 ```bash
 # List credentials first
-pwnAD shadow list targetuser
+pwnAD [auth] shadow list targetuser
 
 # Remove specific credential
-pwnAD shadow remove targetuser <device_id>
+pwnAD [auth] shadow remove targetuser <device_id>
 
 # Or clear all (careful!)
-pwnAD shadow clear targetuser
+pwnAD [auth] shadow clear targetuser
 ```
 
 ## Troubleshooting

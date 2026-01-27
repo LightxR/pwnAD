@@ -6,6 +6,7 @@ pwnAD includes special attack modules that go beyond basic LDAP operations. Thes
 
 | Module | Description |
 |--------|-------------|
+| [dacl](dacl.md) | DACL manipulation (read, write, remove, backup, restore ACEs) |
 | [shadow](shadow.md) | Shadow Credentials attack for account takeover |
 
 ## What are Modules?
@@ -22,6 +23,4 @@ Modules are specialized attack implementations that combine multiple operations:
 Additional modules are planned for future releases. Potential additions include:
 
 - ADCS (Active Directory Certificate Services) attacks
-- DACL abuse automation
 - Trust relationship exploitation
-- LAPS (Local Administrator Password Solution) retrieval
