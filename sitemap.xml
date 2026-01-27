@@ -2,70 +2,74 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://lightxr.github.io/pwnAD/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/authentication/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/installation/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/interactive-mode/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/troubleshooting/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/add/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/get/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/modify/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/query/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/commands/remove/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/kerberos/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/kerberos/getNThash/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/kerberos/getST/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/kerberos/getTGT/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/modules/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
+    </url>
+    <url>
+         <loc>https://lightxr.github.io/pwnAD/modules/dacl/</loc>
+         <lastmod>2026-01-27</lastmod>
     </url>
     <url>
          <loc>https://lightxr.github.io/pwnAD/modules/shadow/</loc>
-         <lastmod>2026-01-26</lastmod>
+         <lastmod>2026-01-27</lastmod>
     </url>
 </urlset>

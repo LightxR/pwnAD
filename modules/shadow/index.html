@@ -1835,13 +1835,13 @@
 <h2 id="cleanup">Cleanup</h2>
 <p>Always clean up after testing:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># List credentials first</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>pwnAD<span class="w"> </span>shadow<span class="w"> </span>list<span class="w"> </span>targetuser
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>shadow<span class="w"> </span>list<span class="w"> </span>targetuser
 <a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
 <a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Remove specific credential</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>pwnAD<span class="w"> </span>shadow<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>&lt;device_id&gt;
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>shadow<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>&lt;device_id&gt;
 <a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
 <a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Or clear all (careful!)</span>
-<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>pwnAD<span class="w"> </span>shadow<span class="w"> </span>clear<span class="w"> </span>targetuser
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>shadow<span class="w"> </span>clear<span class="w"> </span>targetuser
 </code></pre></div>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="no-key-credentials-found">"No Key Credentials found"</h3>

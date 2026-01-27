@@ -1823,7 +1823,7 @@
 <ol>
 <li>Verify you have the required permissions</li>
 <li>Check group memberships:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pwnAD<span class="w"> </span>get<span class="w"> </span>membership<span class="w"> </span>&lt;your_user&gt;
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>get<span class="w"> </span>membership<span class="w"> </span>&lt;your_user&gt;
 </code></pre></div></li>
 <li>Try with a higher-privileged account</li>
 </ol>
@@ -1836,7 +1836,7 @@
 <li>Verify target name spelling</li>
 <li>Check if using sAMAccountName or DN:
    <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Try with full DN</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>pwnAD<span class="w"> </span>query<span class="w"> </span><span class="s2">&quot;(sAMAccountName=targetuser)&quot;</span><span class="w"> </span><span class="s2">&quot;distinguishedName&quot;</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>query<span class="w"> </span><span class="s2">&quot;(sAMAccountName=targetuser)&quot;</span><span class="w"> </span><span class="s2">&quot;distinguishedName&quot;</span>
 </code></pre></div></li>
 </ol>
 <h3 id="constraint-violation">"Constraint violation"</h3>
@@ -1877,7 +1877,7 @@
 </li>
 <li>
 <p>Check if SPN exists:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>pwnAD<span class="w"> </span>get<span class="w"> </span>spn
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>get<span class="w"> </span>spn
 </code></pre></div></p>
 </li>
 </ol>
@@ -1908,7 +1908,7 @@
 <ol>
 <li>Verify domain functional level is 2016+</li>
 <li>Check if attribute exists on target:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>pwnAD<span class="w"> </span>query<span class="w"> </span><span class="s2">&quot;(sAMAccountName=target)&quot;</span><span class="w"> </span><span class="s2">&quot;msDS-KeyCredentialLink&quot;</span>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>query<span class="w"> </span><span class="s2">&quot;(sAMAccountName=target)&quot;</span><span class="w"> </span><span class="s2">&quot;msDS-KeyCredentialLink&quot;</span>
 </code></pre></div></li>
 </ol>
 <h3 id="pkinit-fails-after-adding-key-credential">PKINIT Fails After Adding Key Credential</h3>

