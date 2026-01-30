@@ -73,6 +73,11 @@ def authentication_args(parser):
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("-i", "--interactive", dest="interactive", action="store_true", default=None, help="Start interactive shell")
 
+    web = parser.add_argument_group("Web Interface")
+    web.add_argument("--web", dest="web", action="store_true", default=False, help="Start web interface instead of CLI")
+    web.add_argument("--web-host", dest="web_host", metavar="HOST", default="127.0.0.1", help="Web server bind address (default: 127.0.0.1)")
+    web.add_argument("--web-port", dest="web_port", metavar="PORT", type=int, default=5000, help="Web server port (default: 5000)")
+
 
 def get_parser(interactive=False):
     all_subparsers = []

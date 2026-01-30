@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - {{ title }}{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    {% if custom %}
+    <!-- Custom LDAP Query -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-4">
+            <i class="fas fa-terminal text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">Custom LDAP Query</h2>
+        </div>
+        <form method="GET" action="/query/custom" class="flex flex-col md:flex-row gap-4">
+            <div class="flex-1">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">LDAP Filter</label>
+                <input type="text" name="filter" value="{{ filter_str or '' }}"
+                    placeholder="(&(objectClass=user)(adminCount=1))"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white font-mono placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+            </div>
+            <div class="w-64">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Attributes</label>
+                <input type="text" name="attrs" value="{{ attrs_str or 'sAMAccountName,distinguishedName' }}"
+                    placeholder="sAMAccountName,mail"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white font-mono placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+            </div>
+            <div class="flex items-end">
+                <button type="submit"
+                    class="whitespace-nowrap rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-black hover:bg-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 transition">
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Results -->
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <div class="flex items-center gap-3">
+                <i class="{{ icon }} text-red-500"></i>
+                <h2 class="text-sm font-semibold text-white">{{ title }}</h2>
+                <span class="text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ results|length }} results</span>
+            </div>
+            <input type="text" placeholder="Filter..."
+                class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="filterRows(this.value)">
+        </div>
+
+        <div class="flex-1 overflow-auto scrollbar">
+            <table class="min-w-full text-left text-sm">
+                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                    <tr>
+                        {% for col in columns %}
+                        <th class="px-4 py-3 font-medium">{{ col }}</th>
+                        {% endfor %}
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-800/50" id="query-results">
+                    {% for item in results %}
+                    <tr class="hover:bg-white/[0.02] transition">
+                        {% for col in columns %}
+                        <td class="px-4 py-2.5 text-neutral-300">
+                            {% set val = item.attributes.get(col, '') %}
+                            {% if val is iterable and val is not string %}
+                                {% if val|length > 3 %}
+                                    {{ val[:3]|join(', ') }} <span class="text-neutral-500">+{{ val|length - 3 }}</span>
+                                {% else %}
+                                    {{ val|join(', ') }}
+                                {% endif %}
+                            {% else %}
+                                {{ val or '-' }}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="px-4 py-2.5">
+                            <a href="/object?dn={{ item.dn|urlencode }}" class="text-xs text-blue-400 hover:text-blue-300">Details</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ columns|length + 1 }}" class="px-4 py-8 text-center text-neutral-500">
+                            {% if custom and not filter_str %}
+                            <i class="fas fa-terminal text-2xl mb-2 block"></i>
+                            Enter an LDAP filter above to search
+                            {% else %}
+                            No results found
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterRows(q) {
+    document.querySelectorAll('#query-results tr').forEach(r => {
+        r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

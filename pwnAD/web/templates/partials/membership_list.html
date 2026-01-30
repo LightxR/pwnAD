@@ -1,0 +1,15 @@
+<div class="p-4">
+    <h4 class="text-sm font-semibold text-white mb-2">
+        Group membership for {{ account }}
+        {% if recurse %}(recursive){% endif %}
+        ({{ groups|length }})
+    </h4>
+    <div class="flex flex-wrap gap-1">
+        {% for g in groups %}
+        <span class="px-2 py-0.5 rounded bg-neutral-800 text-xs text-neutral-300">{{ g }}</span>
+        {% endfor %}
+        {% if groups|length == 0 %}
+        <span class="text-neutral-500 text-xs">No group membership found</span>
+        {% endif %}
+    </div>
+</div>

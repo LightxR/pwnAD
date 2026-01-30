@@ -441,9 +441,48 @@ class LDAPConnection:
                 self._do_tls = True # check the code logic
                 logging.info('StartTLS succeded, you are now connected through a TLS channel')
             except Exception as e:
-                logging.error(f"StartTLS failed, error :{e}")    
+                logging.error(f"StartTLS failed, error :{e}")
         else:
-            logging.error('It seems you are already connected through a TLS channel.')  
+            logging.error('It seems you are already connected through a TLS channel.')
+
+    def is_connected(self):
+        """Check if the LDAP connection is still alive."""
+        try:
+            return (self._ldap_connection is not None and
+                    self._ldap_connection.bound and
+                    not self._ldap_connection.closed)
+        except Exception:
+            return False
+
+    def rebind(self):
+        """Attempt to rebind the LDAP connection.
+
+        First tries a simple rebind, if that fails, creates a new connection
+        with the same parameters.
+
+        Returns:
+            bool: True if rebind succeeded, False otherwise.
+        """
+        try:
+            # Try simple rebind first
+            if self._ldap_connection is not None:
+                try:
+                    if self._ldap_connection.bound:
+                        self._ldap_connection.unbind()
+                    self._ldap_connection.bind()
+                    logging.info("[*] Successfully performed LDAP rebind")
+                    return True
+                except Exception as e:
+                    logging.debug(f"Simple rebind failed: {e}, attempting full reconnection")
+
+            # Full reconnection with same parameters
+            self.connect()
+            logging.info("[*] Successfully reconnected to LDAP server")
+            return True
+
+        except Exception as e:
+            logging.error(f"[-] Failed to rebind LDAP connection: {e}")
+            return False  
 
     def add(self, *args, **kwargs) -> Any:
         self._ldap_connection.add(*args, **kwargs)

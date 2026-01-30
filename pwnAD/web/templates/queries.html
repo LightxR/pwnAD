@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Built-in Queries{% endblock %}
+{% block content %}
+<div class="flex h-full">
+    <!-- Internal Sidebar -->
+    <div class="w-56 shrink-0 border-r border-neutral-800 bg-neutral-900/50 p-4 overflow-y-auto scrollbar">
+        <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Kerberos</div>
+        <a href="/queries?q=kerberoastables" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'kerberoastables' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-fire text-orange-500 text-xs w-4"></i>
+            <span>Kerberoastable</span>
+        </a>
+        <a href="/queries?q=asreproastables" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'asreproastables' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-bolt text-yellow-500 text-xs w-4"></i>
+            <span>AS-REP Roastable</span>
+        </a>
+
+        <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 mt-5">Delegation</div>
+        <a href="/queries?q=unconstrained" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'unconstrained' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-unlock text-red-400 text-xs w-4"></i>
+            <span>Unconstrained</span>
+        </a>
+        <a href="/queries?q=constrained" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'constrained' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-link text-blue-400 text-xs w-4"></i>
+            <span>Constrained</span>
+        </a>
+        <a href="/queries?q=rbcd" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'rbcd' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-arrows-turn-to-dots text-purple-400 text-xs w-4"></i>
+            <span>RBCD</span>
+        </a>
+
+        <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 mt-5">Privileges</div>
+        <a href="/queries?q=admin_count" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'admin_count' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-shield-halved text-amber-500 text-xs w-4"></i>
+            <span>AdminCount=1</span>
+        </a>
+        <a href="/queries?q=protected_users" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'protected_users' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-user-shield text-green-500 text-xs w-4"></i>
+            <span>Protected Users</span>
+        </a>
+
+        <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 mt-5">Accounts</div>
+        <a href="/queries?q=passwords_dont_expire" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'passwords_dont_expire' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-hourglass text-cyan-400 text-xs w-4"></i>
+            <span>Pwd Never Expires</span>
+        </a>
+        <a href="/queries?q=users_description" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'users_description' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-comment text-neutral-400 text-xs w-4"></i>
+            <span>Descriptions</span>
+        </a>
+        <a href="/queries?q=sid_history" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'sid_history' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-clock-rotate-left text-indigo-400 text-xs w-4"></i>
+            <span>SID History</span>
+        </a>
+
+        <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 mt-5">Resources</div>
+        <a href="/queries?q=laps" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'laps' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-key text-green-400 text-xs w-4"></i>
+            <span>LAPS</span>
+        </a>
+        <a href="/queries?q=gmsa" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm {% if current_query == 'gmsa' %}bg-red-500/20 text-red-400{% else %}text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition mb-1">
+            <i class="fas fa-robot text-blue-400 text-xs w-4"></i>
+            <span>gMSA</span>
+        </a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 p-6 overflow-y-auto scrollbar">
+        {% if current_query %}
+        <div class="flex items-center gap-3 mb-4">
+            <i class="fas {{ query_icon }} {{ query_color }}"></i>
+            <h2 class="text-lg font-semibold text-white">{{ query_title }}</h2>
+            <span class="text-sm text-neutral-500">({{ results|length }} results)</span>
+        </div>
+
+        {% if error %}
+        <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400 mb-4">
+            <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+        </div>
+        {% endif %}
+
+        {% if results %}
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+            <table class="min-w-full text-left text-sm">
+                <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Name</th>
+                        <th class="px-4 py-3 font-medium">Type</th>
+                        {% if current_query in ['kerberoastables'] %}
+                        <th class="px-4 py-3 font-medium">SPN</th>
+                        {% endif %}
+                        {% if current_query in ['constrained'] %}
+                        <th class="px-4 py-3 font-medium">Allowed To</th>
+                        {% endif %}
+                        {% if current_query in ['users_description'] %}
+                        <th class="px-4 py-3 font-medium">Description</th>
+                        {% endif %}
+                        {% if current_query == 'laps' %}
+                        <th class="px-4 py-3 font-medium">Password</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-800/50">
+                    {% for obj in results %}
+                    <tr class="hover:bg-white/[0.02] transition clickable-row" onclick="window.location='/object?dn={{ obj.dn|urlencode }}'">
+                        <td class="px-4 py-3">
+                            <div class="font-medium text-white">{{ obj.sam or obj.name or 'N/A' }}</div>
+                            <div class="text-xs text-neutral-500 truncate max-w-md">{{ obj.dn }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-neutral-400">
+                            {% if obj.type == 'user' %}
+                            <span class="text-blue-400"><i class="fas fa-user mr-1"></i>User</span>
+                            {% elif obj.type == 'computer' %}
+                            <span class="text-purple-400"><i class="fas fa-desktop mr-1"></i>Computer</span>
+                            {% elif obj.type == 'group' %}
+                            <span class="text-green-400"><i class="fas fa-users mr-1"></i>Group</span>
+                            {% else %}
+                            <span class="text-neutral-400">{{ obj.type or 'Object' }}</span>
+                            {% endif %}
+                        </td>
+                        {% if current_query in ['kerberoastables'] %}
+                        <td class="px-4 py-3 text-xs text-neutral-400 font-mono">
+                            {% if obj.spn is iterable and obj.spn is not string %}
+                                {{ obj.spn[0] }}{% if obj.spn|length > 1 %} <span class="text-neutral-600">+{{ obj.spn|length - 1 }}</span>{% endif %}
+                            {% else %}
+                                {{ obj.spn or '-' }}
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        {% if current_query in ['constrained'] %}
+                        <td class="px-4 py-3 text-xs text-neutral-400 font-mono">
+                            {% if obj.allowed_to is iterable and obj.allowed_to is not string %}
+                                {{ obj.allowed_to[0] }}{% if obj.allowed_to|length > 1 %} <span class="text-neutral-600">+{{ obj.allowed_to|length - 1 }}</span>{% endif %}
+                            {% else %}
+                                {{ obj.allowed_to or '-' }}
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        {% if current_query in ['users_description'] %}
+                        <td class="px-4 py-3 text-xs text-neutral-400 max-w-xs truncate">{{ obj.description or '-' }}</td>
+                        {% endif %}
+                        {% if current_query == 'laps' %}
+                        <td class="px-4 py-3">
+                            {% if obj.laps_password %}
+                            <code class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded font-mono select-all">{{ obj.laps_password }}</code>
+                            {% else %}
+                            <span class="text-neutral-500">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="flex items-center justify-center h-64 text-neutral-500">
+            <div class="text-center">
+                <i class="fas fa-check-circle text-4xl mb-3 text-green-500/50"></i>
+                <p>No results found</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- No query selected - show welcome -->
+        <div class="flex items-center justify-center h-full text-neutral-500">
+            <div class="text-center">
+                <i class="fas fa-database text-5xl mb-4 opacity-30"></i>
+                <h3 class="text-lg font-medium text-white mb-2">Built-in Queries</h3>
+                <p class="text-sm">Select a query from the sidebar to view results</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

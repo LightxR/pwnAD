@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - DACL Editor{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <!-- Search Panel -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-4">
+            <i class="fas fa-lock text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">DACL Editor</h2>
+        </div>
+        <form method="GET" action="/dacl" class="flex flex-col md:flex-row gap-3">
+            <div class="flex-1">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Target (DN or sAMAccountName)</label>
+                <input type="text" name="dn" value="{{ target_dn or '' }}"
+                    placeholder="CN=User,CN=Users,DC=domain,DC=local"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white font-mono placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+            </div>
+            <div class="w-64">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Filter by Principal (optional)</label>
+                <input type="text" name="principal" value="{{ request.args.get('principal', '') }}"
+                    placeholder="jdoe or S-1-5-21-..."
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+            </div>
+            <div class="flex items-end">
+                <button type="submit"
+                    class="whitespace-nowrap rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 transition">
+                    Read DACL
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if aces is not none %}
+    <!-- Actions Bar -->
+    <div class="flex items-center gap-3">
+        <button onclick="document.getElementById('dacl-add-form').classList.remove('hidden')"
+            class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-plus mr-1"></i> Add ACE
+        </button>
+        <a href="/dacl/backup?dn={{ target_dn|urlencode }}"
+            class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">
+            <i class="fas fa-download mr-1"></i> Backup DACL
+        </a>
+        <button onclick="document.getElementById('restore-form').click()"
+            class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">
+            <i class="fas fa-upload mr-1"></i> Restore DACL
+        </button>
+        <form id="restore-upload" style="display:none" enctype="multipart/form-data">
+            <input type="file" id="restore-form" accept=".json" onchange="restoreDacl(this)">
+        </form>
+        <span class="ml-auto text-sm text-neutral-500">
+            Total ACEs: <span class="text-white font-medium">{{ ace_count }}</span>
+            {% if aces|length != ace_count %} | Showing: <span class="text-white font-medium">{{ aces|length }}</span>{% endif %}
+        </span>
+    </div>
+
+    <!-- Add ACE Form (hidden by default) -->
+    {% include "partials/dacl_add_form.html" %}
+
+    {% if error is defined and error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <!-- ACEs Table -->
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">Access Control Entries</span>
+            <input type="text" placeholder="Filter ACEs..."
+                class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="filterAces(this.value)">
+        </div>
+        <div class="flex-1 overflow-auto scrollbar">
+            <table class="min-w-full text-left text-sm" id="aces-table">
+                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                    <tr>
+                        <th class="px-4 py-3 font-medium w-24">Type</th>
+                        <th class="px-4 py-3 font-medium">Trustee</th>
+                        <th class="px-4 py-3 font-medium">Rights</th>
+                        <th class="px-4 py-3 font-medium">Object Type</th>
+                        <th class="px-4 py-3 font-medium w-24">Inherited</th>
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody id="aces-body">
+                    {% include "partials/dacl_table.html" %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% elif aces is none %}
+    <!-- No target selected -->
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center text-neutral-500">
+            <i class="fas fa-lock text-4xl mb-3 block"></i>
+            <p class="text-lg">Enter a target DN or sAMAccountName to view its DACL</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterAces(q) {
+    document.querySelectorAll('#aces-body tr').forEach(function(r) {
+        r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    });
+}
+
+async function removeAce(dn, aceIndex) {
+    var confirmed = await confirmModal('Remove this ACE from the DACL?', 'Remove ACE');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('ace_index', aceIndex);
+    fetch('/dacl/remove', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+function submitDaclWrite(form) {
+    var formData = new FormData(form);
+    fetch('/dacl/write', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+    return false;
+}
+
+function restoreDacl(input) {
+    if (!input.files.length) return;
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+    fetch('/dacl/restore', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+</script>
+{% endblock %}

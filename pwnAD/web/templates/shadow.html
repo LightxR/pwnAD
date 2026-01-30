@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Shadow Credentials{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <!-- Search Panel -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-4">
+            <i class="fas fa-key text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">Shadow Credentials</h2>
+        </div>
+        <form method="GET" action="/shadow" class="flex flex-col md:flex-row gap-3">
+            <div class="flex-1">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Target (sAMAccountName)</label>
+                <input type="text" name="target" value="{{ target or '' }}"
+                    placeholder="e.g. jdoe, DC01$"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+            </div>
+            <div class="flex items-end">
+                <button type="submit"
+                    class="whitespace-nowrap rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+                    List Key Credentials
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if error is defined and error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    {% if credentials is not none and target %}
+    <!-- Actions -->
+    <div class="flex items-center gap-3 flex-wrap">
+        <button onclick="shadowAdd('{{ target }}')"
+            class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-plus mr-1"></i> Add Key Credential
+        </button>
+        <button onclick="shadowAuto('{{ target }}')"
+            class="rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-500 transition">
+            <i class="fas fa-wand-magic-sparkles mr-1"></i> Auto Attack (Get NT Hash)
+        </button>
+        <button onclick="shadowClear('{{ target }}')"
+            class="rounded-md border border-red-700 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 transition">
+            <i class="fas fa-trash mr-1"></i> Clear All
+        </button>
+        <span class="ml-auto text-sm text-neutral-500">
+            Key Credentials: <span class="text-white font-medium">{{ credentials|length }}</span>
+        </span>
+    </div>
+
+    <!-- Auto Attack Result -->
+    <div id="auto-result" class="hidden rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+        <div class="flex items-center gap-2 mb-1">
+            <i class="fas fa-check-circle text-green-400"></i>
+            <span class="text-sm font-semibold text-green-400">NT Hash Retrieved</span>
+        </div>
+        <code id="auto-hash" class="text-sm text-white font-mono select-all"></code>
+    </div>
+
+    <!-- Credentials Table -->
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">Key Credentials for <span class="text-white">{{ target }}</span></span>
+        </div>
+        <div class="flex-1 overflow-auto scrollbar">
+            <table class="min-w-full text-left text-sm">
+                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Device ID</th>
+                        <th class="px-4 py-3 font-medium">Creation Time</th>
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody id="cred-body" class="divide-y divide-neutral-800/50">
+                    {% include "partials/shadow_list.html" %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% elif credentials is none and not target %}
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center text-neutral-500">
+            <i class="fas fa-key text-4xl mb-3 block"></i>
+            <p class="text-lg">Enter a target sAMAccountName to manage shadow credentials</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function shadowAdd(target) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/shadow/add';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'target';
+    input.value = target;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+async function shadowAuto(target) {
+    var confirmed = await showModal({
+        title: 'Auto Attack',
+        message: 'This will add a key credential, extract the NT hash via PKINIT, then restore the original state.\n\nContinue?',
+        type: 'warning',
+        confirmText: 'Run Attack',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/shadow/auto', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                document.getElementById('auto-result').classList.remove('hidden');
+                document.getElementById('auto-hash').textContent = data.nt_hash;
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function shadowRemove(target, deviceId) {
+    var confirmed = await confirmModal('Remove key credential ' + deviceId + '?', 'Remove Credential');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    formData.append('device_id', deviceId);
+    fetch('/shadow/remove', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function shadowClear(target) {
+    var confirmed = await confirmDanger('Clear ALL key credentials for ' + target + '?\n\nThis action cannot be undone.', 'Clear All Credentials');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/shadow/clear', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+</script>
+{% endblock %}

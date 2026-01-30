@@ -19,12 +19,18 @@ setup(
         "ldap3==2.10.2rc3",
         "pyasn1==0.4.8",
         "dsinternals",
+        "flask",
     ],
     packages=[
         "pwnAD",
         "pwnAD.commands",
         "pwnAD.lib",
+        "pwnAD.web",
+        "pwnAD.web.routes",
     ],
+    package_data={
+        "pwnAD.web": ["templates/*.html", "templates/partials/*.html", "static/*"],
+    },
     entry_points={
         "console_scripts": ["pwnAD=pwnAD.main:main"],
     },

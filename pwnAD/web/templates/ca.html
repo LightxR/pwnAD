@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Certificate Authorities{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <div class="flex items-center gap-2">
+        <i class="fas fa-certificate text-red-500"></i>
+        <h2 class="text-lg font-semibold text-white">Certificate Authorities</h2>
+    </div>
+
+    {% if error is defined and error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    {% if results|length == 0 and not error %}
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center text-neutral-500">
+            <i class="fas fa-certificate text-4xl mb-3 block"></i>
+            <p class="text-lg">No Certificate Authorities found</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="grid grid-cols-1 gap-4">
+        {% for r in results %}
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fas fa-certificate text-yellow-500"></i>
+                <h3 class="text-sm font-semibold text-white">{{ r.attributes.get('cn', r.attributes.get('name', 'Unknown')) }}</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div>
+                    <span class="text-neutral-500">DNS Host:</span>
+                    <span class="text-white ml-1">{{ r.attributes.get('dNSHostName', 'N/A') }}</span>
+                </div>
+                <div>
+                    <span class="text-neutral-500">CA DN:</span>
+                    <span class="text-white ml-1 font-mono text-xs">{{ r.attributes.get('cACertificateDN', 'N/A') }}</span>
+                </div>
+                {% if r.attributes.get('certificateTemplates') %}
+                <div class="md:col-span-2">
+                    <span class="text-neutral-500">Templates:</span>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        {% set templates = r.attributes.get('certificateTemplates', []) %}
+                        {% if templates is string %}
+                            <span class="px-2 py-0.5 rounded bg-neutral-800 text-xs text-neutral-300">{{ templates }}</span>
+                        {% else %}
+                            {% for t in templates %}
+                            <span class="px-2 py-0.5 rounded bg-neutral-800 text-xs text-neutral-300">{{ t }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

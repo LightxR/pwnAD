@@ -1,0 +1,79 @@
+<div class="rounded-lg border border-neutral-700 bg-neutral-950/50 p-4 mb-4" id="create-form-panel">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">
+            {% if object_type == 'users' %}Create User
+            {% elif object_type == 'computers' %}Create Computer
+            {% else %}Create Object{% endif %}
+        </h3>
+        <button onclick="document.getElementById('create-form-panel').remove()" class="text-neutral-500 hover:text-white">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    {% if object_type == 'users' %}
+    <form onsubmit="return submitCreateForm(this, '/api/user/create')">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Username</label>
+                <input type="text" name="username" required
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    placeholder="jdoe">
+            </div>
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Password</label>
+                <input type="password" name="password" required
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    placeholder="P@ssw0rd!">
+            </div>
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">OU (optional)</label>
+                <input type="text" name="ou"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    placeholder="OU=Staff,{{ base_dn }}">
+            </div>
+        </div>
+        <button type="submit" class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-plus mr-1"></i> Create User
+        </button>
+    </form>
+
+    {% elif object_type == 'computers' %}
+    <form onsubmit="return submitCreateForm(this, '/api/computer/create')">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Computer Name (optional, random if empty)</label>
+                <input type="text" name="name"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    placeholder="WORKSTATION01">
+            </div>
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Password (optional, random if empty)</label>
+                <input type="password" name="password"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+            </div>
+        </div>
+        <button type="submit" class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-plus mr-1"></i> Create Computer
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+function submitCreateForm(form, url) {
+    var formData = new FormData(form);
+    fetch(url, { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) {
+                document.getElementById('create-form-panel').remove();
+                if (data.dn) {
+                    setTimeout(function() { window.location.reload(); }, 500);
+                }
+            }
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+    return false;
+}
+</script>

@@ -72,40 +72,10 @@ def start_interactive_mode(conn):
                 continue
 
             elif command == "rebind":
-                backup_conn = conn
-                try:
-                    if conn._ldap_connection.bound:
-                        logging.debug("Connection already bound")
-                        conn._ldap_connection.unbind()
-                    conn._ldap_connection.bind()
+                if conn.rebind():
                     logging.info("Successfully performed a connection rebind.")
-
-                except Exception as e:
-                    try:
-                        logging.debug("Simple rebind failed, launching a new connection with the current user and options")
-                        new_conn = LDAPConnection(
-                            target=conn.target,
-                            domain=conn.domain,
-                            ldap_user=conn.ldap_user,
-                            ldap_pass=conn.ldap_pass,
-                            lmhash=conn.lmhash,
-                            nthash=conn.nthash,
-                            aesKey=conn.aesKey,
-                            pfx=conn.pfx,
-                            pfx_pass=conn.pfx_pass,
-                            key=conn.key,
-                            cert=conn.cert,
-                            use_kerberos=conn.use_kerberos,
-                            kdcHost=conn.kdcHost,
-                            _do_tls=conn._do_tls,
-                            port=conn.port
-                        )
-                        new_conn.connect()
-                        conn = new_conn
-                        logging.info("Successfully performed a connection rebind.")
-                    except (LDAPAuthenticationError, Exception) as rebind_error:
-                        logging.error(f"An error occurred when trying to rebind connection: {rebind_error}")
-                        conn = backup_conn
+                else:
+                    logging.error("Failed to rebind connection.")
                 continue
 
             elif command == "switch_user":

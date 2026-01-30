@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Attacks{% endblock %}
+{% block content %}
+<div class="p-6 h-full overflow-y-auto scrollbar">
+    <div class="flex items-center gap-2 mb-6">
+        <i class="fas fa-crosshairs text-red-500"></i>
+        <h2 class="text-lg font-semibold text-white">Attack Operations</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- DCSync -->
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-database text-red-500 mr-2"></i>DCSync</h3>
+            <form onsubmit="return submitAttack(this, '/api/attack/dcsync')">
+                <div class="mb-3">
+                    <label class="block text-xs text-neutral-400 mb-1">Principal (sAMAccountName)</label>
+                    <input type="text" name="principal" required placeholder="attacker_user"
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Grant DCSync</button>
+                    <button type="button" onclick="submitAttackBtn(this.closest('form'), '/api/attack/dcsync/remove')"
+                        class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">Remove</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- GenericAll -->
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-star text-red-500 mr-2"></i>GenericAll</h3>
+            <form onsubmit="return submitAttack(this, '/api/attack/generic-all')">
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Target</label>
+                        <input type="text" name="target" required placeholder="victim_user"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Principal</label>
+                        <input type="text" name="principal" required placeholder="attacker_user"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Grant GenericAll</button>
+                    <button type="button" onclick="submitAttackBtn(this.closest('form'), '/api/attack/generic-all/remove')"
+                        class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">Remove</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- RBCD -->
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-arrows-turn-to-dots text-red-500 mr-2"></i>RBCD</h3>
+            <form onsubmit="return submitAttack(this, '/api/attack/rbcd')">
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Target Computer</label>
+                        <input type="text" name="target" required placeholder="DC01$"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Grantee</label>
+                        <input type="text" name="grantee" required placeholder="EVIL$"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Configure RBCD</button>
+                    <button type="button" onclick="submitAttackBtn(this.closest('form'), '/api/attack/rbcd/remove')"
+                        class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">Clear RBCD</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- GPO DACL -->
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-scroll text-red-500 mr-2"></i>GPO DACL</h3>
+            <form onsubmit="return submitAttack(this, '/api/attack/gpo-dacl')">
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">User</label>
+                        <input type="text" name="user" required placeholder="attacker_user"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">GPO GUID</label>
+                        <input type="text" name="gpo_id" required placeholder="{6AC1786C-...}"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                </div>
+                <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Write GPO DACL</button>
+            </form>
+        </div>
+
+        <!-- UAC Flags -->
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 md:col-span-2">
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-flag text-red-500 mr-2"></i>UAC Flags</h3>
+            <form onsubmit="return submitAttack(this, '/api/attack/uac/add')">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Target</label>
+                        <input type="text" name="target" required placeholder="victim_user"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs text-neutral-400 mb-1">Flags (comma-separated)</label>
+                        <input type="text" name="flags" required placeholder="DONT_REQ_PREAUTH, TRUSTED_FOR_DELEGATION"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Add Flags</button>
+                    <button type="button" onclick="submitAttackBtn(this.closest('form'), '/api/attack/uac/remove')"
+                        class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">Remove Flags</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function submitAttack(form, url) {
+    var formData = new FormData(form);
+    fetch(url, { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { showToast(data.message, data.success ? 'success' : 'error'); })
+        .catch(function() { showToast('Request failed', 'error'); });
+    return false;
+}
+
+function submitAttackBtn(form, url) {
+    submitAttack(form, url);
+}
+</script>
+{% endblock %}

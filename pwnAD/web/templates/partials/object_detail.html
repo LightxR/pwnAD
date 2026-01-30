@@ -1,0 +1,623 @@
+<!-- Back button -->
+<div class="flex items-center gap-3 mb-2">
+    <a href="javascript:history.back()" class="text-neutral-400 hover:text-white transition">
+        <i class="fas fa-arrow-left"></i>
+    </a>
+    <h2 class="text-lg font-semibold text-white">Object Detail</h2>
+</div>
+
+<!-- DN Banner with Security Badges -->
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 mb-2">
+    <div class="flex items-center justify-between">
+        <div class="flex-1">
+            <div class="text-xs text-neutral-500 mb-1">Distinguished Name</div>
+            <div class="text-sm font-mono text-red-400 break-all">{{ obj.dn }}</div>
+        </div>
+    </div>
+    {% set uac = obj.attributes.get('userAccountControl', 0)|int %}
+    {% set spns = obj.attributes.get('servicePrincipalName', []) %}
+    {% set has_spn = spns and (spns is string or spns|length > 0) %}
+    {% set dont_req_preauth = (uac // 4194304) % 2 == 1 %}
+    {% set trusted_for_delegation = (uac // 524288) % 2 == 1 %}
+    {% set trusted_to_auth = (uac // 16777216) % 2 == 1 %}
+    {% set rbcd_attr = obj.attributes.get('msDS-AllowedToActOnBehalfOfOtherIdentity', None) %}
+    {% set has_rbcd = rbcd_attr is not none and rbcd_attr %}
+    {% set key_creds = obj.attributes.get('msDS-KeyCredentialLink', []) %}
+    {% set has_shadow = key_creds and (key_creds is string or key_creds|length > 0) %}
+    {% set admin_count = obj.attributes.get('adminCount', None) %}
+    {% set is_admin = admin_count is not none and admin_count|string == '1' %}
+    {% set obj_class = obj.attributes.get('objectClass', []) %}
+    {% set is_user = 'user' in obj_class or 'person' in obj_class %}
+    {% set is_computer = 'computer' in obj_class %}
+
+    {% if has_spn or dont_req_preauth or trusted_for_delegation or trusted_to_auth or has_rbcd or has_shadow or is_admin %}
+    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-neutral-800">
+        {% if has_spn and is_user %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30" title="Has SPN - Kerberoastable">
+            <i class="fas fa-fire"></i> Kerberoastable
+        </span>
+        {% endif %}
+        {% if dont_req_preauth %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title="DONT_REQ_PREAUTH flag set">
+            <i class="fas fa-bolt"></i> AS-REP Roastable
+        </span>
+        {% endif %}
+        {% if trusted_for_delegation %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30" title="TRUSTED_FOR_DELEGATION - Unconstrained Delegation">
+            <i class="fas fa-unlock"></i> Unconstrained Deleg.
+        </span>
+        {% endif %}
+        {% if trusted_to_auth %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30" title="TRUSTED_TO_AUTH_FOR_DELEGATION - Constrained Delegation">
+            <i class="fas fa-link"></i> Constrained Deleg.
+        </span>
+        {% endif %}
+        {% if has_rbcd %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30" title="Has RBCD configured">
+            <i class="fas fa-arrows-turn-to-dots"></i> RBCD
+        </span>
+        {% endif %}
+        {% if has_shadow %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-pink-500/20 text-pink-400 border border-pink-500/30" title="Has Shadow Credentials">
+            <i class="fas fa-key"></i> Shadow Creds
+        </span>
+        {% endif %}
+        {% if is_admin %}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30" title="AdminCount=1 - Protected from inheritance">
+            <i class="fas fa-shield-halved"></i> AdminCount
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Action Bar -->
+{% set sam = obj.attributes.get('sAMAccountName', '') %}
+{% set obj_class = obj.attributes.get('objectClass', []) %}
+{% set is_user = 'user' in obj_class or 'person' in obj_class %}
+{% set is_computer = 'computer' in obj_class %}
+{% set is_group = 'group' in obj_class %}
+<div class="flex items-center gap-2 mb-2 flex-wrap">
+    <!-- Security Actions -->
+    <a href="/dacl?dn={{ obj.dn|urlencode }}"
+        class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
+        <i class="fas fa-lock mr-1"></i> DACL
+    </a>
+    {% if is_user or is_computer %}
+    <a href="/shadow?target={{ sam|urlencode }}"
+        class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
+        <i class="fas fa-key mr-1"></i> Shadow Creds
+    </a>
+    {% endif %}
+
+    <!-- Divider -->
+    <div class="w-px h-5 bg-neutral-700 mx-1"></div>
+
+    <!-- Account Actions -->
+    {% if is_user or is_computer %}
+    <button onclick='setPassword({{ obj.dn|tojson }})'
+        class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
+        <i class="fas fa-key mr-1"></i> Set Password
+    </button>
+    {% endif %}
+    {% set uac_val = obj.attributes.get('userAccountControl', None) %}
+    {% if uac_val is not none %}
+        {% set is_disabled = (uac_val | int) % 4 // 2 == 1 %}
+        {% if is_disabled %}
+    <button onclick='toggleAccount({{ obj.dn|tojson }}, "enable")'
+        class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/10 transition">
+        <i class="fas fa-check mr-1"></i> Enable
+    </button>
+        {% else %}
+    <button onclick='toggleAccount({{ obj.dn|tojson }}, "disable")'
+        class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10 transition">
+        <i class="fas fa-ban mr-1"></i> Disable
+    </button>
+        {% endif %}
+    {% endif %}
+
+    <!-- Group: Add Member (direct button) -->
+    {% if is_group %}
+    <button onclick="addMemberToGroup()"
+        class="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/20 transition">
+        <i class="fas fa-user-plus mr-1"></i> Add Member
+    </button>
+    {% endif %}
+
+    <!-- User: Add to Group (direct button) -->
+    {% if is_user %}
+    <button onclick="addUserToGroup()"
+        class="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/20 transition">
+        <i class="fas fa-users mr-1"></i> Add to Group
+    </button>
+    {% endif %}
+
+    <!-- Attack Dropdown -->
+    {% if is_user or is_computer %}
+    <div class="relative" id="attack-dropdown">
+        <button onclick="toggleAttackMenu()" type="button"
+            class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 transition">
+            <i class="fas fa-crosshairs mr-1"></i> Attacks <i class="fas fa-chevron-down ml-1 text-[10px]"></i>
+        </button>
+        <div id="attack-menu" class="hidden absolute left-0 mt-1 w-56 rounded-md border border-neutral-700 bg-neutral-900 shadow-lg z-30">
+            <div class="py-1">
+                <button onclick="attackGenericAll()" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-star text-red-400 w-5"></i> Grant GenericAll
+                </button>
+                <button onclick="attackShadowAuto('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-wand-magic-sparkles text-orange-400 w-5"></i> Shadow Creds (Get Hash)
+                </button>
+                {% if is_computer %}
+                <button onclick="attackRBCD()" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-arrows-turn-to-dots text-purple-400 w-5"></i> Configure RBCD
+                </button>
+                {% endif %}
+                {% if is_user %}
+                <button onclick="attackASREP('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-bolt text-yellow-400 w-5"></i> Set DONT_REQ_PREAUTH
+                </button>
+                <button onclick="attackSPN('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-fire text-orange-400 w-5"></i> Add SPN (Kerberoast)
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Delete (right-aligned) -->
+    <button onclick='deleteCurrentObject({{ obj.dn|tojson }})'
+        class="rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition ml-auto">
+        <i class="fas fa-trash mr-1"></i> Delete
+    </button>
+</div>
+
+<!-- Owner Card -->
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 mb-2">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-crown text-yellow-500"></i>
+            <div>
+                <div class="text-xs text-neutral-500">Owner</div>
+                {% if owner_info %}
+                    <span class="text-sm text-white font-medium">{{ owner_info.name }}</span>
+                    {% if owner_info.name != owner_info.sid %}
+                        <span class="text-xs text-neutral-500 ml-2">({{ owner_info.sid }})</span>
+                    {% endif %}
+                {% else %}
+                    <span class="text-sm text-neutral-500">Unable to resolve</span>
+                {% endif %}
+            </div>
+        </div>
+        <button onclick="toggleOwnerEdit()" class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
+            <i class="fas fa-pen mr-1"></i> Change Owner
+        </button>
+    </div>
+    <div id="owner-edit" class="hidden mt-3 pt-3 border-t border-neutral-800">
+        <div class="relative">
+            <input type="text" id="owner-search" placeholder="Search for a principal..."
+                class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="debounceOwnerSearch(this.value)" autocomplete="off">
+            <div id="owner-suggestions" class="hidden absolute z-20 mt-1 w-full rounded-md border border-neutral-700 bg-neutral-900 max-h-48 overflow-auto shadow-lg"></div>
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="submitOwnerChange()" class="rounded-md bg-red-500 px-3 py-1.5 text-xs text-white hover:bg-red-400 transition">Save</button>
+            <button onclick="toggleOwnerEdit()" class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-white transition">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Attributes Table -->
+<div class="flex-1 rounded-lg border border-neutral-800 bg-neutral-900 min-h-0 flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+        <span class="text-sm text-neutral-400">
+            Attributes <span class="text-white font-medium">{{ obj.attributes|length }}</span>
+        </span>
+        <div class="flex items-center gap-2">
+            <button onclick="showAddAttrForm()" class="text-xs text-red-400 hover:text-red-300 transition">
+                <i class="fas fa-plus mr-1"></i> Add Attribute
+            </button>
+            <input type="text" placeholder="Filter attributes..."
+                class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="filterAttrs(this.value)">
+        </div>
+    </div>
+
+    <!-- Add Attribute Form (hidden) -->
+    <div id="add-attr-form" class="hidden px-4 py-3 border-b border-neutral-700 bg-neutral-950/30">
+        <form onsubmit="return addAttribute(this)">
+            <div class="flex gap-2 items-end">
+                <div class="flex-1">
+                    <label class="block text-xs text-neutral-400 mb-1">Attribute Name</label>
+                    <input type="text" name="attr" required placeholder="description"
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs text-neutral-400 mb-1">Value</label>
+                    <input type="text" name="value" required placeholder="value"
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                </div>
+                <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-400 transition">Add</button>
+                <button type="button" onclick="document.getElementById('add-attr-form').classList.add('hidden')"
+                    class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-400 hover:text-white transition">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="flex-1 overflow-auto scrollbar">
+        <table class="min-w-full text-left text-sm" id="attr-table">
+            <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                <tr>
+                    <th class="px-4 py-3 font-medium w-64">Attribute</th>
+                    <th class="px-4 py-3 font-medium">Value</th>
+                    <th class="px-4 py-3 font-medium w-20"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/50">
+                {% for attr, val in obj.attributes.items()|sort %}
+                <tr class="hover:bg-white/[0.02] transition attr-row">
+                    <td class="px-4 py-2.5 text-red-400/80 font-mono text-xs align-top whitespace-nowrap">{{ attr }}</td>
+                    <td class="px-4 py-2.5 text-neutral-300 break-all">
+                        {% if val is iterable and val is not string %}
+                            {% for v in val %}
+                                <div class="flex items-center gap-1 py-0.5 group">
+                                    {% if v is string and ('CN=' in v or 'OU=' in v or 'DC=' in v) and ',' in v %}
+                                        <a href="/object?dn={{ v|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ v }}</a>
+                                    {% else %}
+                                        <span class="editable-value text-xs cursor-pointer hover:bg-white/5 px-1 py-0.5 rounded"
+                                            data-dn="{{ obj.dn }}" data-attr="{{ attr }}"
+                                            ondblclick="startInlineEdit(this)">{{ v }}</span>
+                                    {% endif %}
+                                    <button onclick='removeAttrValue({{ obj.dn|tojson }}, {{ attr|tojson }}, {{ v|string|tojson }})'
+                                        class="text-red-400/0 group-hover:text-red-400/50 hover:!text-red-400 text-[10px] ml-1 transition" title="Remove value">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            {% endfor %}
+                            {% if val|length == 0 %}
+                                <span class="text-neutral-600">empty</span>
+                            {% endif %}
+                            <!-- Add value button for multi-valued attrs -->
+                            <button onclick='promptAddValue({{ obj.dn|tojson }}, {{ attr|tojson }})'
+                                class="text-red-400/40 hover:text-red-400 text-[10px] mt-1 transition">
+                                <i class="fas fa-plus mr-0.5"></i> add value
+                            </button>
+                        {% elif val is string and ('CN=' in val or 'OU=' in val) and ',' in val %}
+                            <a href="/object?dn={{ val|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ val }}</a>
+                        {% elif val %}
+                            <span class="editable-value text-xs cursor-pointer hover:bg-white/5 px-1 py-0.5 rounded"
+                                data-dn="{{ obj.dn }}" data-attr="{{ attr }}"
+                                ondblclick="startInlineEdit(this)">{{ val }}</span>
+                        {% else %}
+                            <span class="text-neutral-600">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 align-top">
+                        <button onclick='removeAttrAll({{ obj.dn|tojson }}, {{ attr|tojson }})'
+                            class="text-red-400/30 hover:text-red-400 text-xs transition" title="Clear attribute">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function filterAttrs(q) {
+    document.querySelectorAll('.attr-row').forEach(function(r) {
+        r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    });
+}
+
+function showAddAttrForm() {
+    document.getElementById('add-attr-form').classList.remove('hidden');
+}
+
+function addAttribute(form) {
+    var formData = new FormData();
+    formData.append('dn', {{ obj.dn|tojson }});
+    formData.append('attr', form.attr.value);
+    formData.append('value', form.value.value);
+    fetch('/api/attribute/add', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+    return false;
+}
+
+async function removeAttrValue(dn, attr, value) {
+    var confirmed = await confirmModal('Remove this value from ' + attr + '?', 'Remove Value');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('attr', attr);
+    formData.append('value', value);
+    fetch('/api/attribute/remove', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function removeAttrAll(dn, attr) {
+    var confirmed = await confirmModal('Clear all values from ' + attr + '?', 'Clear Attribute');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('attr', attr);
+    fetch('/api/attribute/remove', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function promptAddValue(dn, attr) {
+    var value = await promptModal('Enter the value to add:', 'Add Value to ' + attr);
+    if (!value) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('attr', attr);
+    formData.append('value', value);
+    fetch('/api/attribute/add', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function setPassword(dn) {
+    var pwd = await promptPassword('Enter the new password for this account:', 'Modify Password');
+    if (!pwd) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('new_password', pwd);
+    fetch('/api/user/password', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { showToast(data.message, data.success ? 'success' : 'error'); })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+function toggleAccount(dn, action) {
+    var formData = new FormData();
+    formData.append('dn', dn);
+    formData.append('action', action);
+    fetch('/api/user/toggle-state', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+var _ownerSearchTimer = null;
+var _selectedOwner = '';
+
+function toggleOwnerEdit() {
+    var el = document.getElementById('owner-edit');
+    el.classList.toggle('hidden');
+    if (!el.classList.contains('hidden')) {
+        document.getElementById('owner-search').value = '';
+        document.getElementById('owner-suggestions').classList.add('hidden');
+        _selectedOwner = '';
+        document.getElementById('owner-search').focus();
+    }
+}
+
+function debounceOwnerSearch(q) {
+    clearTimeout(_ownerSearchTimer);
+    _selectedOwner = q;
+    if (q.length < 2) {
+        document.getElementById('owner-suggestions').classList.add('hidden');
+        return;
+    }
+    _ownerSearchTimer = setTimeout(function() {
+        fetch('/api/principals/search?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var box = document.getElementById('owner-suggestions');
+                if (!data.length) { box.classList.add('hidden'); return; }
+                box.innerHTML = data.map(function(p) {
+                    return '<div class="px-3 py-2 text-sm text-neutral-300 hover:bg-white/5 cursor-pointer" onclick="selectOwner(\'' + p.sam.replace(/'/g, "\\'") + '\')">' + p.sam + '</div>';
+                }).join('');
+                box.classList.remove('hidden');
+            });
+    }, 250);
+}
+
+function selectOwner(sam) {
+    _selectedOwner = sam;
+    document.getElementById('owner-search').value = sam;
+    document.getElementById('owner-suggestions').classList.add('hidden');
+}
+
+function submitOwnerChange() {
+    if (!_selectedOwner) { showToast('Select a principal first', 'error'); return; }
+    var formData = new FormData();
+    formData.append('target', {{ obj.attributes.get('sAMAccountName', obj.dn)|tojson }});
+    formData.append('new_owner', _selectedOwner);
+    fetch('/api/owner/modify', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function deleteCurrentObject(dn) {
+    var confirmed = await confirmDanger('This action cannot be undone.\n\n' + dn, 'Delete Object');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    fetch('/api/object/delete', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { history.back(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// Attack dropdown menu
+function toggleAttackMenu() {
+    var menu = document.getElementById('attack-menu');
+    menu.classList.toggle('hidden');
+}
+
+// Close menu when clicking outside
+document.addEventListener('click', function(e) {
+    var dropdown = document.getElementById('attack-dropdown');
+    var menu = document.getElementById('attack-menu');
+    if (dropdown && menu && !dropdown.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
+// Attack functions
+async function attackGenericAll() {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var principal = await openSearchModal('Grant GenericAll to...');
+    if (!principal) return;
+    var formData = new FormData();
+    formData.append('target', {{ sam|tojson }});
+    formData.append('principal', principal);
+    fetch('/api/attack/generic-all', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function attackShadowAuto(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var confirmed = await showModal({
+        title: 'Shadow Credentials Attack',
+        message: 'This will add a key credential to ' + target + ', extract the NT hash via PKINIT, then restore the original state.\n\nContinue?',
+        type: 'warning',
+        confirmText: 'Run Attack',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/shadow/auto', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showModal({
+                    title: 'NT Hash Retrieved',
+                    message: 'NT Hash for ' + target + ':\n\n' + data.nt_hash,
+                    type: 'info',
+                    confirmText: 'OK',
+                    cancelText: 'Close'
+                });
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function attackRBCD() {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var grantee = await openSearchModal('Allow delegation from...');
+    if (!grantee) return;
+    var formData = new FormData();
+    formData.append('target', {{ sam|tojson }});
+    formData.append('grantee', grantee);
+    fetch('/api/attack/rbcd', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function attackASREP(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var confirmed = await showModal({
+        title: 'AS-REP Roasting',
+        message: 'Set DONT_REQ_PREAUTH flag on ' + target + '?\n\nThis will make the account vulnerable to AS-REP roasting.',
+        type: 'warning',
+        confirmText: 'Set Flag',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    formData.append('flags', 'DONT_REQ_PREAUTH');
+    fetch('/api/attack/uac/add', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function attackSPN(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var spn = await promptModal('Enter SPN to add (e.g., HTTP/victim):', 'Targeted Kerberoast on ' + target, '');
+    if (!spn) return;
+    var formData = new FormData();
+    formData.append('dn', {{ obj.dn|tojson }});
+    formData.append('attr', 'servicePrincipalName');
+    formData.append('value', spn);
+    fetch('/api/attribute/add', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// Add member to this group (for group objects)
+async function addMemberToGroup() {
+    var member = await openSearchModal('Add member to {{ sam }}');
+    if (!member) return;
+    var formData = new FormData();
+    formData.append('group_dn', {{ obj.dn|tojson }});
+    formData.append('member', member);
+    fetch('/api/group/add-member', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// Add this user to a group (for user objects)
+async function addUserToGroup() {
+    var group = await openSearchModal('Add {{ sam }} to group...', 'group');
+    if (!group) return;
+    var formData = new FormData();
+    formData.append('group', group);
+    formData.append('member', {{ sam|tojson }});
+    fetch('/api/group/add-member-by-name', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+</script>
