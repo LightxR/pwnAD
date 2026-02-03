@@ -8,7 +8,6 @@
             <h2 class="text-lg font-semibold text-white">Writable Objects</h2>
         </div>
         <form method="GET" action="/writable" class="flex flex-col md:flex-row gap-3 items-end">
-            <input type="hidden" name="search" value="1">
             <div>
                 <label class="block text-xs font-medium text-neutral-400 mb-1.5">Object Type</label>
                 <select name="otype" class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
@@ -65,13 +64,6 @@
         </div>
         <div class="flex-1 overflow-auto scrollbar">
             {% include "partials/writable_results.html" %}
-        </div>
-    </div>
-    {% else %}
-    <div class="flex-1 flex items-center justify-center">
-        <div class="text-center text-neutral-500">
-            <i class="fas fa-pen text-4xl mb-3 block"></i>
-            <p class="text-lg">Configure filters and click Search to find writable objects</p>
         </div>
     </div>
     {% endif %}

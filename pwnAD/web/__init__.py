@@ -38,4 +38,7 @@ def create_app(ldap_connection):
     from pwnAD.web.routes.attack import attack_bp
     app.register_blueprint(attack_bp)
 
+    from pwnAD.web.routes.adcs import adcs_bp
+    app.register_blueprint(adcs_bp)
+
     return app

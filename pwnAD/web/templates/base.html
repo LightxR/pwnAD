@@ -61,7 +61,7 @@
     <nav class="hidden md:flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 p-4 h-screen overflow-y-auto scrollbar">
         <!-- Logo -->
         <a href="/" class="ml-1 mb-6 text-2xl font-bold text-white">
-            <span class="text-red-500">p</span>wn<span class="text-red-500">AD</span>
+            pwn<span class="text-red-500">AD</span>
             <span class="text-[0.6rem] align-super font-medium bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded ml-1">Web</span>
         </a>
 
@@ -94,16 +94,16 @@
                 <span>OUs</span>
                 {% if counts and counts.ous is defined %}<span class="ml-auto text-xs text-neutral-500">{{ counts.ous }}</span>{% endif %}
             </a>
-            <a href="/ca" class="sidebar-link {% if active_page == 'ca' %}active{% endif %}">
+            <a href="/adcs" class="sidebar-link {% if active_page == 'adcs' %}active{% endif %}">
                 <i class="fas fa-certificate"></i>
-                <span>Certificate Auth.</span>
+                <span>Certificate Authorities</span>
             </a>
 
             <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">LDAP</div>
 
             <a href="/queries" class="sidebar-link {% if active_page == 'queries' or active_page in ['kerberoastables', 'asreproastables', 'unconstrained', 'constrained', 'rbcd', 'admin_count', 'protected_users', 'passwords_dont_expire', 'users_description', 'sid_history'] %}active{% endif %}">
-                <i class="fas fa-database"></i>
-                <span>Built-in Queries</span>
+                <i class="fas fa-filter"></i>
+                <span>Builtin Queries</span>
             </a>
             <a href="/query/custom" class="sidebar-link {% if active_page == 'custom' %}active{% endif %}">
                 <i class="fas fa-terminal"></i>
@@ -153,7 +153,7 @@
 
     <!-- Mobile header -->
     <div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-neutral-900 border-b border-neutral-800 px-4 py-3 flex items-center justify-between">
-        <a href="/" class="text-lg font-bold text-white"><span class="text-red-500">p</span>wn<span class="text-red-500">AD</span></a>
+        <a href="/" class="text-lg font-bold text-white">pwn<span class="text-red-500">AD</span></a>
         <button onclick="document.getElementById('mobile-nav').classList.toggle('hidden')" class="text-neutral-400 hover:text-white">
             <i class="fas fa-bars text-lg"></i>
         </button>
@@ -164,13 +164,13 @@
         <a href="/browse/groups" class="sidebar-link"><i class="fas fa-users"></i> Groups</a>
         <a href="/browse/computers" class="sidebar-link"><i class="fas fa-desktop"></i> Computers</a>
         <a href="/browse/ous" class="sidebar-link"><i class="fas fa-sitemap"></i> OUs</a>
+        <a href="/queries" class="sidebar-link"><i class="fas fa-filter"></i> Builtin Queries</a>
+        <a href="/query/custom" class="sidebar-link"><i class="fas fa-terminal"></i> Custom LDAP</a>
         <a href="/dacl" class="sidebar-link"><i class="fas fa-lock"></i> DACL Editor</a>
         <a href="/shadow" class="sidebar-link"><i class="fas fa-key"></i> Shadow Credentials</a>
         <a href="/attacks" class="sidebar-link"><i class="fas fa-crosshairs"></i> Attacks</a>
-        <a href="/laps" class="sidebar-link"><i class="fas fa-key"></i> LAPS</a>
-        <a href="/gmsa" class="sidebar-link"><i class="fas fa-robot"></i> gMSA</a>
         <a href="/writable" class="sidebar-link"><i class="fas fa-pen"></i> Writable Objects</a>
-        <a href="/ca" class="sidebar-link"><i class="fas fa-certificate"></i> Certificate Auth.</a>
+        <a href="/adcs" class="sidebar-link"><i class="fas fa-certificate"></i> Certificate Authorities</a>
         <a href="/dns" class="sidebar-link"><i class="fas fa-globe"></i> DNS Records</a>
     </div>
 

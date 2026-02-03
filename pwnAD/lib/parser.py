@@ -314,6 +314,12 @@ Functions:
   Credentials:
     laps, gmsa
 
+  ADCS (Certificate Services):
+    adcs
+
+  Recycle Bin:
+    deleted                 List deleted objects from AD Recycle Bin
+
   Miscellaneous:
     owner, machine_quota, writable, protected_users, users_description,
     passwords_dont_expire, users_with_admin_count, accounts_with_sid_histoy,
@@ -440,6 +446,19 @@ Functions:
     get_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Display raw attribute values")
     all_subparsers.append(get_attribute_parser)
 
+    get_adcs_parser = get_subparsers.add_parser('adcs', help="Full ADCS enumeration (CAs, templates, ESC1-ESC15)")
+    get_adcs_parser.add_argument("--vulnerable", dest="vulnerable_only", action="store_true", help="Show only vulnerable templates")
+    get_adcs_parser.add_argument("--format", dest="format", choices=["text", "json", "csv"], default="text", help="Output format (default: text)")
+    get_adcs_parser.add_argument("-o", "--output", dest="output", action="store", metavar="FILE", help="Output file path (base name for CSV)")
+    get_adcs_parser.add_argument("--stdout", dest="stdout", action="store_true", help="Force output to stdout even with --output")
+    get_adcs_parser.add_argument("--no-ca-config", dest="ca_config", action="store_false", default=True, help="Don't try to get CA config via RRP")
+    all_subparsers.append(get_adcs_parser)
+
+    get_deleted_parser = get_subparsers.add_parser('deleted', help="List deleted objects from AD Recycle Bin")
+    get_deleted_parser.add_argument("target", nargs="?", action="store", default=None, help="Optional target to search for (sAMAccountName, SID, or name pattern)")
+    get_deleted_parser.add_argument("--otype", dest="otype", action="store", default="*", choices=["*", "user", "computer", "group"], help="Object type filter (default: all)")
+    all_subparsers.append(get_deleted_parser)
+
     # MODIFY action
     modify_description = """
 Modify Active Directory object attributes.
@@ -447,7 +466,8 @@ Modify Active Directory object attributes.
 Functions:
   Credentials:   password
   Properties:    owner, computer_name, dontreqpreauth, attribute
-  Account:       disable_account, enable_account"""
+  Account:       disable_account, enable_account
+  Recycle Bin:   restore_deleted"""
 
     parser_modify = subparsers.add_parser(
         'modify',
@@ -495,6 +515,12 @@ Functions:
     modify_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Send values as-is without encoding")
     modify_attribute_parser.add_argument("--b64", dest="b64", action="store_true", help="Decode values from base64")
     all_subparsers.append(modify_attribute_parser)
+
+    modify_restore_deleted_parser = modify_subparsers.add_parser('restore_deleted', help="Restore a deleted object from AD Recycle Bin")
+    modify_restore_deleted_parser.add_argument("target", action="store", help="Target to restore (sAMAccountName, objectSid, or DN)")
+    modify_restore_deleted_parser.add_argument("--new-name", dest="new_name", action="store", default=None, help="New name for the restored object")
+    modify_restore_deleted_parser.add_argument("--new-parent", dest="new_parent", action="store", default=None, help="New parent container DN (default: original location)")
+    all_subparsers.append(modify_restore_deleted_parser)
 
 
     # QUERY action

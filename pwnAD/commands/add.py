@@ -13,7 +13,7 @@ from pwnAD.lib.accesscontrol import (
     ACCESS_FLAGS, ACCOUNT_FLAGS, UAC_WORKSTATION_TRUST, UAC_NORMAL_ACCOUNT_ENABLED,
     create_allow_ace, create_empty_sd
 )
-from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value, LDAPOperationError
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_serial
 
 
@@ -124,13 +124,11 @@ def dcsync(conn, trustee):
 
     res = conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={conn._baseDN})', attributes=['nTSecurityDescriptor'])
     if res is None:
-        logging.error('Failed to get forest\'s SD')
-        return
+        raise LDAPOperationError('Failed to get forest\'s SD')
 
     baseDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
     if baseDN_sd['nTSecurityDescriptor'] == []:
-        logging.error("User doesn't have right read nTSecurityDescriptor!")
-        return
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
     sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=baseDN_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
@@ -163,12 +161,11 @@ def genericAll(conn, target, trustee):
 
     res = conn.search(search_base=targetDN, search_filter=f'(distinguishedName={targetDN})', attributes=['nTSecurityDescriptor'])
     if res is None:
-        logging.error('Failed to get forest\'s SD')
+        raise LDAPOperationError('Failed to get target\'s SD')
 
     targetDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
     if targetDN_sd['nTSecurityDescriptor'] == []:
-        logging.error("User doesn't have right read nTSecurityDescriptor!")
-        return
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
     sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetDN_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
@@ -260,8 +257,7 @@ def RBCD(conn, target, grantee):
     """
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(target), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])
     if success is False or len(conn._ldap_connection.entries) != 1:
-        logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
-        return
+        raise LDAPOperationError(f"Target '{target}' not found")
 
     target_result = conn._ldap_connection.entries[0]
     target_sid = target_result["objectSid"].value
@@ -270,8 +266,7 @@ def RBCD(conn, target, grantee):
 
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(grantee), attributes=['objectSid'])
     if success is False or len(conn._ldap_connection.entries) != 1:
-        logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
-        return
+        raise LDAPOperationError(f"Grantee '{grantee}' not found")
 
     grantee_result = conn._ldap_connection.entries[0]
     grantee_sid = grantee_result["objectSid"].value
@@ -285,8 +280,7 @@ def RBCD(conn, target, grantee):
             logging.debug('    %s' % ace['Ace']['Sid'].formatCanonical())
 
             if ace['Ace']['Sid'].formatCanonical() == grantee_sid:
-                logging.error("Grantee is already permitted to perform delegation to the target host")
-                return
+                raise LDAPOperationError("Grantee is already permitted to perform delegation to the target host")
 
     except IndexError:
         sd = create_empty_sd()
@@ -317,9 +311,7 @@ def uac(conn, target: str, flags: list):
     for flag in flags:
         flag_upper = flag.upper()
         if flag_upper not in ACCOUNT_FLAGS:
-            logging.error(f"Unknown UAC flag: {flag}")
-            logging.info(f"Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
-            return
+            raise LDAPOperationError(f"Unknown UAC flag: {flag}. Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
         uac_to_add |= ACCOUNT_FLAGS[flag_upper]
 
     # Search for the target and get current userAccountControl
@@ -330,8 +322,7 @@ def uac(conn, target: str, flags: list):
     )
 
     if not conn._ldap_connection.entries:
-        logging.error(f"Target '{target}' not found in LDAP")
-        return
+        raise LDAPOperationError(f"Target '{target}' not found in LDAP")
 
     entry = conn._ldap_connection.entries[0]
     target_dn = entry.entry_dn
@@ -339,8 +330,7 @@ def uac(conn, target: str, flags: list):
     try:
         old_uac = entry['userAccountControl'].value
     except (KeyError, IndexError):
-        logging.error(f"Cannot read userAccountControl attribute for '{target}'")
-        return
+        raise LDAPOperationError(f"Cannot read userAccountControl attribute for '{target}'")
 
     # Combine old UAC with new flags using bitwise OR
     new_uac = old_uac | uac_to_add

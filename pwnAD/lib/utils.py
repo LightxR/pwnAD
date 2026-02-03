@@ -12,6 +12,11 @@ from ldap3.utils.conv import escape_filter_chars
 from pwnAD.lib.certificate import hash_digest, hashes
 
 
+class LDAPOperationError(Exception):
+    """Exception raised when an LDAP operation fails."""
+    pass
+
+
 class Completer:
     """
     Code logic from @Podalirius ldapconsole tool
@@ -100,28 +105,32 @@ def execute_action_function(options, connection):
         sys.exit(1)
 
 def check_error(conn, error_code, e):
+    error_msg = None
     if error_code == RESULT_ENTRY_ALREADY_EXISTS:
-        logging.error("Entry already exists")
+        error_msg = "Entry already exists"
     elif error_code == RESULT_INSUFFICIENT_ACCESS_RIGHTS:
-        logging.error(f"User '{conn.user}' lacks permissions for this operation")
+        error_msg = f"User '{conn.user}' lacks permissions for this operation"
     elif error_code == RESULT_UNWILLING_TO_PERFORM:
         # Parse Windows error codes from LDAP message for more specific errors
         error_str = str(e)
         if "0000052D" in error_str:
-            logging.error("Password does not meet the domain password policy requirements")
+            error_msg = "Password does not meet the domain password policy requirements"
         elif "00000524" in error_str:
-            logging.error("Account already exists")
+            error_msg = "Account already exists"
         elif "00000532" in error_str:
-            logging.error("Password expired")
+            error_msg = "Password expired"
         elif "00000775" in error_str:
-            logging.error("Account is locked out")
+            error_msg = "Account is locked out"
         else:
-            logging.error(f"Server refused the operation (possible causes: insufficient permissions, policy violation, no secure connection)")
+            error_msg = "Server refused the operation (possible causes: insufficient permissions, policy violation, no secure connection)"
             logging.debug(f"LDAP error details: {e}")
     elif error_code == RESULT_CONSTRAINT_VIOLATION:
-        logging.error(f"Constraint violation: {e}")
+        error_msg = f"Constraint violation: {e}"
     else:
-        logging.error(f"Unexpected error: {e}")
+        error_msg = f"Unexpected error: {e}"
+
+    logging.debug(f"LDAP operation failed: {error_msg}")
+    raise LDAPOperationError(error_msg)
 
 def parse_lm_nt_hashes(lm_nt_hashes_string):
     lm_hash_value = "aad3b435b51404eeaad3b435b51404ee"

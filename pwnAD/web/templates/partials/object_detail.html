@@ -7,13 +7,24 @@
 </div>
 
 <!-- DN Banner with Security Badges -->
-<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 mb-2">
+<div class="rounded-lg border {% if is_deleted %}border-red-500/50 bg-red-900/20{% else %}border-neutral-800 bg-neutral-900{% endif %} p-4 mb-2">
     <div class="flex items-center justify-between">
         <div class="flex-1">
             <div class="text-xs text-neutral-500 mb-1">Distinguished Name</div>
             <div class="text-sm font-mono text-red-400 break-all">{{ obj.dn }}</div>
         </div>
     </div>
+    {% if is_deleted %}
+    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-red-500/30">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+            <i class="fas fa-trash-can"></i> This object is deleted
+        </span>
+        <span class="text-xs text-neutral-500">
+            {% set last_parent = obj.attributes.get('lastKnownParent', '') %}
+            {% if last_parent %}Original location: {{ last_parent }}{% endif %}
+        </span>
+    </div>
+    {% endif %}
     {% set uac = obj.attributes.get('userAccountControl', 0)|int %}
     {% set spns = obj.attributes.get('servicePrincipalName', []) %}
     {% set has_spn = spns and (spns is string or spns|length > 0) %}
@@ -78,7 +89,8 @@
 {% set is_computer = 'computer' in obj_class %}
 {% set is_group = 'group' in obj_class %}
 <div class="flex items-center gap-2 mb-2 flex-wrap">
-    <!-- Security Actions -->
+    {% if not is_deleted %}
+    <!-- Security Actions (hidden for deleted objects) -->
     <a href="/dacl?dn={{ obj.dn|urlencode }}"
         class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
         <i class="fas fa-lock mr-1"></i> DACL
@@ -164,12 +176,25 @@
         </div>
     </div>
     {% endif %}
+    {% else %}
+    <!-- For deleted objects, show a simpler action bar -->
+    <span class="text-xs text-neutral-500 italic">
+        <i class="fas fa-info-circle mr-1"></i> Actions are limited for deleted objects. Use Restore to recover this object.
+    </span>
+    {% endif %}
 
-    <!-- Delete (right-aligned) -->
+    <!-- Delete or Restore (right-aligned) -->
+    {% if is_deleted %}
+    <button onclick='restoreCurrentObject({{ obj.dn|tojson }}, {{ obj.attributes.get("lastKnownParent", "")|tojson }})'
+        class="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/20 transition ml-auto">
+        <i class="fas fa-rotate-left mr-1"></i> Restore
+    </button>
+    {% else %}
     <button onclick='deleteCurrentObject({{ obj.dn|tojson }})'
         class="rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition ml-auto">
         <i class="fas fa-trash mr-1"></i> Delete
     </button>
+    {% endif %}
 </div>
 
 <!-- Owner Card -->
@@ -189,9 +214,11 @@
                 {% endif %}
             </div>
         </div>
+        {% if not is_deleted %}
         <button onclick="toggleOwnerEdit()" class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-white/5 transition">
             <i class="fas fa-pen mr-1"></i> Change Owner
         </button>
+        {% endif %}
     </div>
     <div id="owner-edit" class="hidden mt-3 pt-3 border-t border-neutral-800">
         <div class="relative">
@@ -214,9 +241,11 @@
             Attributes <span class="text-white font-medium">{{ obj.attributes|length }}</span>
         </span>
         <div class="flex items-center gap-2">
+            {% if not is_deleted %}
             <button onclick="showAddAttrForm()" class="text-xs text-red-400 hover:text-red-300 transition">
                 <i class="fas fa-plus mr-1"></i> Add Attribute
             </button>
+            {% endif %}
             <input type="text" placeholder="Filter attributes..."
                 class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
                 oninput="filterAttrs(this.value)">
@@ -468,6 +497,33 @@ async function deleteCurrentObject(dn) {
         .then(function(data) {
             showToast(data.message, data.success ? 'success' : 'error');
             if (data.success) setTimeout(function() { history.back(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+async function restoreCurrentObject(dn, lastKnownParent) {
+    var confirmed = await showModal({
+        title: 'Restore Deleted Object',
+        message: 'Restore this object to its original location?\n\n' + (lastKnownParent || 'Unknown location'),
+        type: 'info',
+        confirmText: 'Restore',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+
+    var formData = new FormData();
+    formData.append('dn', dn);
+    if (lastKnownParent) {
+        formData.append('new_parent', lastKnownParent);
+    }
+
+    fetch('/api/object/restore', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success && data.restored_dn) {
+                setTimeout(function() { window.location.href = '/object?dn=' + encodeURIComponent(data.restored_dn); }, 500);
+            }
         })
         .catch(function() { showToast('Request failed', 'error'); });
 }

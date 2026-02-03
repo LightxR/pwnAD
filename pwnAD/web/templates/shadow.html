@@ -91,17 +91,31 @@
 </div>
 
 <script>
-function shadowAdd(target) {
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/shadow/add';
-    var input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'target';
-    input.value = target;
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
+async function shadowAdd(target) {
+    var formData = new FormData();
+    formData.append('target', target);
+    try {
+        var response = await fetch('/shadow/add', { method: 'POST', body: formData });
+        var contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            var data = await response.json();
+            showToast(data.message, 'error');
+        } else {
+            var blob = await response.blob();
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = target.replace(/\$$/, '') + '.pfx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            showToast('Key credential added and PFX downloaded', 'success');
+            setTimeout(function() { location.reload(); }, 500);
+        }
+    } catch (e) {
+        showToast('Request failed', 'error');
+    }
 }
 
 async function shadowAuto(target) {

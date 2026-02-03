@@ -427,3 +427,119 @@ def create_form(object_type):
         'base_dn': conn._baseDN,
     }
     return render_template('partials/create_form.html', **ctx)
+
+
+@actions_bp.route('/object/restore', methods=['POST'])
+def object_restore():
+    """Restore a deleted object from the AD Recycle Bin."""
+    conn = _get_conn()
+    dn = request.form.get('dn', '').strip()
+    new_name = request.form.get('new_name', '').strip() or None
+    new_parent = request.form.get('new_parent', '').strip() or None
+
+    if not dn:
+        return _json_response(False, 'Missing DN', 400)
+
+    # LDAP control to show/modify deleted objects
+    LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417"
+    show_deleted_control = (LDAP_SERVER_SHOW_DELETED_OID, True, None)
+
+    try:
+        # Fetch the deleted object attributes
+        conn._ldap_connection.search(
+            search_base=dn,
+            search_filter='(objectClass=*)',
+            search_scope=ldap3.BASE,
+            attributes=['sAMAccountName', 'msDS-LastKnownRDN', 'lastKnownParent', 'name',
+                       'servicePrincipalName', 'userPrincipalName', 'dNSHostName', 'displayName'],
+            controls=[show_deleted_control]
+        )
+
+        if not conn._ldap_connection.entries:
+            return _json_response(False, 'Deleted object not found')
+
+        entry = conn._ldap_connection.entries[0]
+        attrs = {attr: entry[attr].value for attr in entry.entry_attributes}
+
+        # Determine the RDN and parent for restoration
+        sam_account_name = attrs.get('sAMAccountName', '')
+        last_known_rdn = attrs.get('msDS-LastKnownRDN', '')
+        last_known_parent = attrs.get('lastKnownParent', '')
+        name = attrs.get('name', '')
+
+        # Determine restored RDN
+        if new_name:
+            restored_rdn = new_name
+        elif last_known_rdn:
+            restored_rdn = last_known_rdn
+        elif name and '\x0a' in name:
+            restored_rdn = name.split('\x0a')[0]
+        elif name:
+            restored_rdn = name
+        else:
+            return _json_response(False, 'Cannot determine RDN for restoration')
+
+        # Determine parent container
+        if new_parent:
+            restored_parent = new_parent
+        elif last_known_parent:
+            restored_parent = last_known_parent
+        else:
+            return _json_response(False, 'Cannot determine parent container. Specify new_parent.')
+
+        # Build the new DN
+        restored_dn = f"CN={restored_rdn},{restored_parent}"
+
+        # Build modifications
+        modifications = {
+            'isDeleted': [(MODIFY_DELETE, [])],
+            'distinguishedName': [(MODIFY_REPLACE, [restored_dn])]
+        }
+
+        # Update related attributes if renaming
+        if new_name and new_name != last_known_rdn:
+            display_name = attrs.get('displayName', '')
+            if display_name:
+                old_name_part = name.split('\x0a')[0] if '\x0a' in name else name
+                modifications['displayName'] = [(MODIFY_REPLACE, [display_name.replace(old_name_part, new_name)])]
+
+            if sam_account_name:
+                new_sam = new_name + '$' if sam_account_name.endswith('$') else new_name
+                modifications['sAMAccountName'] = [(MODIFY_REPLACE, [new_sam])]
+
+            spn_list = attrs.get('servicePrincipalName', [])
+            if spn_list:
+                if not isinstance(spn_list, list):
+                    spn_list = [spn_list]
+                old_name_part = name.split('\x0a')[0] if '\x0a' in name else name
+                new_spns = [spn.replace(old_name_part, new_name) for spn in spn_list]
+                modifications['servicePrincipalName'] = [(MODIFY_REPLACE, new_spns)]
+
+            upn = attrs.get('userPrincipalName', '')
+            if upn and '@' in upn:
+                domain_part = upn.split('@')[-1]
+                modifications['userPrincipalName'] = [(MODIFY_REPLACE, [f"{new_name}@{domain_part}"])]
+
+            dns_hostname = attrs.get('dNSHostName', '')
+            if dns_hostname and '.' in dns_hostname:
+                domain_suffix = dns_hostname.split('.', 1)[-1]
+                modifications['dNSHostName'] = [(MODIFY_REPLACE, [f"{new_name}.{domain_suffix}"])]
+
+        # Perform the restore
+        conn._ldap_connection.modify(
+            dn,
+            modifications,
+            controls=[show_deleted_control]
+        )
+
+        result = conn._ldap_connection.result
+        if result['result'] == 0:
+            return _json_response(True, f'Object restored to {restored_dn}', restored_dn=restored_dn)
+        else:
+            error_msg = result.get('message', 'Unknown error')
+            desc = result.get('description', '')
+            return _json_response(False, f'Failed to restore: {desc} - {error_msg}')
+
+    except Exception as e:
+        logging.error(f"object restore error: {e}")
+        return _json_response(False, str(e))

@@ -1,247 +1,256 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - Dashboard{% endblock %}
 {% block content %}
-<div class="p-6 h-full flex flex-col gap-6">
-    <!-- Domain Overview -->
+<div class="p-6 h-full">
+    <!-- Main Grid: Left column (Domain Info + Quick Queries) | Right column (stats) -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <!-- Domain Info Card -->
-        <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-            <div class="flex items-center gap-2 mb-3">
-                <i class="fas fa-network-wired text-red-500"></i>
-                <h2 class="text-sm font-semibold text-white">Domain Info</h2>
+        <!-- Left Column: Domain Info + Quick Queries -->
+        <div class="lg:col-span-1 flex flex-col gap-4">
+            <!-- Domain Info Card -->
+            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fas fa-network-wired text-red-500"></i>
+                    <h2 class="text-sm font-semibold text-white">Domain Info</h2>
+                </div>
+                <div class="text-xl font-bold text-white mb-1">{{ domain }}</div>
+                <div class="text-xs text-neutral-500 font-mono mb-3">{{ base_dn }}</div>
+                <div class="border-t border-neutral-800 pt-3 space-y-3">
+                    {% if machine_quota is defined and machine_quota != '?' %}
+                    <div>
+                        <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">Machine Quota</div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-white font-semibold">{{ machine_quota }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if password_policy %}
+                    <div>
+                        <div class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5">Password Policy</div>
+                        <div class="space-y-1.5">
+                            {% if password_policy.min_length is defined and password_policy.min_length != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Min Password Length</span>
+                                <span class="text-white font-semibold">{{ password_policy.min_length }}</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.max_age_days is defined and password_policy.max_age_days != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Max Password Age</span>
+                                <span class="text-white font-semibold">{{ password_policy.max_age_days }} days</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.min_age_days is defined and password_policy.min_age_days != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Min Password Age</span>
+                                <span class="text-white font-semibold">{{ password_policy.min_age_days }} days</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.history_length is defined and password_policy.history_length != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Password History</span>
+                                <span class="text-white font-semibold">{{ password_policy.history_length }}</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.complexity is defined and password_policy.complexity != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Complexity Required</span>
+                                <span class="text-white font-semibold">{{ 'Yes' if password_policy.complexity == true else 'No' }}</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.lockout_threshold is defined and password_policy.lockout_threshold != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Lockout Threshold</span>
+                                <span class="text-white font-semibold">{{ password_policy.lockout_threshold }}</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.lockout_duration_min is defined and password_policy.lockout_duration_min != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Lockout Duration</span>
+                                <span class="text-white font-semibold">{{ password_policy.lockout_duration_min }} min</span>
+                            </div>
+                            {% endif %}
+                            {% if password_policy.lockout_window_min is defined and password_policy.lockout_window_min != '?' %}
+                            <div class="flex justify-between text-xs">
+                                <span class="text-neutral-500">Lockout Window</span>
+                                <span class="text-white font-semibold">{{ password_policy.lockout_window_min }} min</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            <div class="text-xl font-bold text-white mb-1">{{ domain }}</div>
-            <div class="text-xs text-neutral-500 font-mono mb-3">{{ base_dn }}</div>
-            <div class="border-t border-neutral-800 pt-3 space-y-2">
-                {% if machine_quota is defined and machine_quota != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Machine Quota</span>
-                    <span class="text-white font-semibold">{{ machine_quota }}</span>
+
+            <!-- Quick Queries -->
+            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="fas fa-shield-halved text-red-500"></i>
+                    <h2 class="text-sm font-semibold text-white">Quick Queries</h2>
                 </div>
-                {% endif %}
-                {% if password_policy %}
-                {% if password_policy.min_length is defined and password_policy.min_length != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Min Password Length</span>
-                    <span class="text-white font-semibold">{{ password_policy.min_length }}</span>
+                <div class="space-y-1">
+                    <a href="/query/kerberoastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-fire w-4 text-center text-orange-400"></i>
+                        <span>Kerberoastable Accounts</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.kerberoastables }}</span>
+                    </a>
+                    <a href="/query/asreproastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-bolt w-4 text-center text-yellow-400"></i>
+                        <span>AS-REP Roastable</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.asreproastables }}</span>
+                    </a>
+                    <a href="/query/unconstrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-unlock w-4 text-center text-red-400"></i>
+                        <span>Unconstrained Delegation</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.unconstrained }}</span>
+                    </a>
+                    <a href="/query/constrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-link w-4 text-center text-blue-400"></i>
+                        <span>Constrained Delegation</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.constrained }}</span>
+                    </a>
+                    <a href="/query/admin_count" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-shield-halved w-4 text-center text-pink-400"></i>
+                        <span>AdminCount=1</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.admin_count }}</span>
+                    </a>
+                    <a href="/query/password_not_required" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-key w-4 text-center text-emerald-400"></i>
+                        <span>PASSWD_NOTREQD</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.password_not_required }}</span>
+                    </a>
+                    <a href="/query/machine_accounts" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-server w-4 text-center text-indigo-400"></i>
+                        <span>Machine Accounts</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.machine_accounts }}</span>
+                    </a>
+                    <a href="/query/protected_users" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+                        <i class="fas fa-user-shield w-4 text-center text-cyan-400"></i>
+                        <span>Protected Users</span>
+                        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.protected_users }}</span>
+                    </a>
                 </div>
-                {% endif %}
-                {% if password_policy.max_age_days is defined and password_policy.max_age_days != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Max Password Age</span>
-                    <span class="text-white font-semibold">{{ password_policy.max_age_days }} days</span>
-                </div>
-                {% endif %}
-                {% if password_policy.min_age_days is defined and password_policy.min_age_days != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Min Password Age</span>
-                    <span class="text-white font-semibold">{{ password_policy.min_age_days }} days</span>
-                </div>
-                {% endif %}
-                {% if password_policy.history_length is defined and password_policy.history_length != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Password History</span>
-                    <span class="text-white font-semibold">{{ password_policy.history_length }}</span>
-                </div>
-                {% endif %}
-                {% if password_policy.complexity is defined and password_policy.complexity != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Complexity Required</span>
-                    <span class="text-white font-semibold">{{ 'Yes' if password_policy.complexity == true else 'No' }}</span>
-                </div>
-                {% endif %}
-                {% if password_policy.lockout_threshold is defined and password_policy.lockout_threshold != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Lockout Threshold</span>
-                    <span class="text-white font-semibold">{{ password_policy.lockout_threshold }}</span>
-                </div>
-                {% endif %}
-                {% if password_policy.lockout_duration_min is defined and password_policy.lockout_duration_min != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Lockout Duration</span>
-                    <span class="text-white font-semibold">{{ password_policy.lockout_duration_min }} min</span>
-                </div>
-                {% endif %}
-                {% if password_policy.lockout_window_min is defined and password_policy.lockout_window_min != '?' %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-neutral-500">Lockout Window</span>
-                    <span class="text-white font-semibold">{{ password_policy.lockout_window_min }} min</span>
-                </div>
-                {% endif %}
-                {% endif %}
             </div>
         </div>
 
-        <!-- Users & Computers Column -->
-        <div class="grid grid-rows-2 gap-4">
-            <!-- Users Count -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center gap-2 mb-3">
-                    <i class="fas fa-user text-blue-400"></i>
-                    <h2 class="text-sm font-semibold text-white">Users</h2>
+        <!-- Right Column: Stats stacked -->
+        <div class="lg:col-span-2 flex flex-col gap-4">
+            <!-- Users & Computers Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Users Count -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-user text-blue-400"></i>
+                        <h2 class="text-sm font-semibold text-white">Users</h2>
+                    </div>
+                    <div class="text-3xl font-bold text-white">{{ counts.users }}</div>
+                    <a href="/browse/users" class="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block">Browse all &rarr;</a>
                 </div>
-                <div class="text-3xl font-bold text-white">{{ counts.users }}</div>
-                <a href="/browse/users" class="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block">Browse all &rarr;</a>
-            </div>
 
-            <!-- Computers Count -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center gap-2 mb-3">
-                    <i class="fas fa-desktop text-purple-400"></i>
-                    <h2 class="text-sm font-semibold text-white">Computers</h2>
+                <!-- Computers Count -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-desktop text-purple-400"></i>
+                        <h2 class="text-sm font-semibold text-white">Computers</h2>
+                    </div>
+                    <div class="text-3xl font-bold text-white">{{ counts.computers }}</div>
+                    <a href="/browse/computers" class="text-xs text-purple-400 hover:text-purple-300 mt-1 inline-block">Browse all &rarr;</a>
                 </div>
-                <div class="text-3xl font-bold text-white">{{ counts.computers }}</div>
-                <a href="/browse/computers" class="text-xs text-purple-400 hover:text-purple-300 mt-1 inline-block">Browse all &rarr;</a>
             </div>
-        </div>
 
-        <!-- Groups & OUs Column -->
-        <div class="grid grid-rows-2 gap-4">
-            <!-- Groups Count -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center gap-2 mb-3">
-                    <i class="fas fa-users text-green-400"></i>
-                    <h2 class="text-sm font-semibold text-white">Groups</h2>
+            <!-- Groups & OUs Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Groups Count -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-users text-green-400"></i>
+                        <h2 class="text-sm font-semibold text-white">Groups</h2>
+                    </div>
+                    <div class="text-3xl font-bold text-white">{{ counts.groups }}</div>
+                    <a href="/browse/groups" class="text-xs text-green-400 hover:text-green-300 mt-1 inline-block">Browse all &rarr;</a>
                 </div>
-                <div class="text-3xl font-bold text-white">{{ counts.groups }}</div>
-                <a href="/browse/groups" class="text-xs text-green-400 hover:text-green-300 mt-1 inline-block">Browse all &rarr;</a>
-            </div>
 
-            <!-- OUs Count -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center gap-2 mb-3">
-                    <i class="fas fa-sitemap text-amber-400"></i>
-                    <h2 class="text-sm font-semibold text-white">Organizational Units</h2>
+                <!-- OUs Count -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-sitemap text-amber-400"></i>
+                        <h2 class="text-sm font-semibold text-white">Organizational Units</h2>
+                    </div>
+                    <div class="text-3xl font-bold text-white">{{ ous|length }}</div>
+                    <a href="/browse/ous" class="text-xs text-amber-400 hover:text-amber-300 mt-1 inline-block">Browse all &rarr;</a>
                 </div>
-                <div class="text-3xl font-bold text-white">{{ ous|length }}</div>
-                <a href="/browse/ous" class="text-xs text-amber-400 hover:text-amber-300 mt-1 inline-block">Browse all &rarr;</a>
             </div>
-        </div>
-    </div>
 
-    <!-- Secondary Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <!-- Quick Queries -->
-        <div class="lg:col-span-2 bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-            <div class="flex items-center gap-2 mb-4">
-                <i class="fas fa-shield-halved text-red-500"></i>
-                <h2 class="text-sm font-semibold text-white">Quick Queries</h2>
-            </div>
-            <div class="space-y-1">
-                <a href="/query/kerberoastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-fire w-4 text-center text-orange-400"></i>
-                    <span>Kerberoastable Accounts</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.kerberoastables }}</span>
-                </a>
-                <a href="/query/asreproastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-bolt w-4 text-center text-yellow-400"></i>
-                    <span>AS-REP Roastable</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.asreproastables }}</span>
-                </a>
-                <a href="/query/unconstrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-unlock w-4 text-center text-red-400"></i>
-                    <span>Unconstrained Delegation</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.unconstrained }}</span>
-                </a>
-                <a href="/query/constrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-link w-4 text-center text-blue-400"></i>
-                    <span>Constrained Delegation</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.constrained }}</span>
-                </a>
-                <a href="/query/admin_count" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-shield-halved w-4 text-center text-pink-400"></i>
-                    <span>AdminCount=1</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.admin_count }}</span>
-                </a>
-                <a href="/query/password_not_required" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-key w-4 text-center text-emerald-400"></i>
-                    <span>PASSWD_NOTREQD</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.password_not_required }}</span>
-                </a>
-                <a href="/query/machine_accounts" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-server w-4 text-center text-indigo-400"></i>
-                    <span>Machine Accounts</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.machine_accounts }}</span>
-                </a>
-                <a href="/query/protected_users" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
-                    <i class="fas fa-user-shield w-4 text-center text-cyan-400"></i>
-                    <span>Protected Users</span>
-                    <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.protected_users }}</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Right Column -->
-        <div class="lg:col-span-3 flex flex-col gap-4">
-            <!-- Domain Controllers -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-server text-red-500"></i>
-                        <h2 class="text-sm font-semibold text-white">Domain Controllers</h2>
+            <!-- Domain Controllers & Certificate Authorities Row -->
+            <div class="flex flex-col gap-4">
+                <!-- Domain Controllers -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-server text-red-500"></i>
+                            <h2 class="text-sm font-semibold text-white">Domain Controllers</h2>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="text-xs text-neutral-500 uppercase">
+                                <tr>
+                                    <th class="px-3 py-2">Name</th>
+                                    <th class="px-3 py-2">SPN</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-neutral-300">
+                                {% for dc in domain_controllers %}
+                                <tr class="border-t border-neutral-800">
+                                    <td class="px-3 py-2 font-medium text-white">{{ dc.name }}</td>
+                                    <td class="px-3 py-2 text-xs font-mono text-neutral-400">
+                                        {% if dc.spn is iterable and dc.spn is not string %}
+                                            {{ dc.spn[:2]|join(', ') }}{% if dc.spn|length > 2 %} <span class="text-neutral-600">+{{ dc.spn|length - 2 }}</span>{% endif %}
+                                        {% else %}
+                                            {{ dc.spn or '-' }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="2" class="px-3 py-4 text-center text-neutral-500">No DCs found</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-left text-sm">
-                        <thead class="text-xs text-neutral-500 uppercase">
-                            <tr>
-                                <th class="px-3 py-2">Name</th>
-                                <th class="px-3 py-2">SPN</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-neutral-300">
-                            {% for dc in domain_controllers %}
-                            <tr class="border-t border-neutral-800">
-                                <td class="px-3 py-2 font-medium text-white">{{ dc.name }}</td>
-                                <td class="px-3 py-2 text-xs font-mono text-neutral-400">
-                                    {% if dc.spn is iterable and dc.spn is not string %}
-                                        {{ dc.spn[:2]|join(', ') }}{% if dc.spn|length > 2 %} <span class="text-neutral-600">+{{ dc.spn|length - 2 }}</span>{% endif %}
-                                    {% else %}
-                                        {{ dc.spn or '-' }}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="2" class="px-3 py-4 text-center text-neutral-500">No DCs found</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-            <!-- Certificate Authorities -->
-            <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-certificate text-teal-400"></i>
-                        <h2 class="text-sm font-semibold text-white">Certificate Authorities</h2>
+                <!-- Certificate Authorities -->
+                <div class="bg-neutral-900 rounded-lg p-5 border border-neutral-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-certificate text-teal-400"></i>
+                            <h2 class="text-sm font-semibold text-white">Certificate Authorities</h2>
+                        </div>
+                        <a href="/ca" class="text-xs text-blue-400 hover:text-blue-300">View All</a>
                     </div>
-                    <a href="/ca" class="text-xs text-blue-400 hover:text-blue-300">View All</a>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-left text-sm">
-                        <thead class="text-xs text-neutral-500 uppercase">
-                            <tr>
-                                <th class="px-3 py-2">Name</th>
-                                <th class="px-3 py-2">DNS Host</th>
-                                <th class="px-3 py-2">Templates</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-neutral-300">
-                            {% for ca in certificate_authorities %}
-                            <tr class="border-t border-neutral-800">
-                                <td class="px-3 py-2 font-medium text-white">{{ ca.name }}</td>
-                                <td class="px-3 py-2 text-xs font-mono text-neutral-400">{{ ca.dns_host }}</td>
-                                <td class="px-3 py-2 text-xs text-neutral-400">{{ ca.templates_count }}</td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="3" class="px-3 py-4 text-center text-neutral-500">No CAs found</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="text-xs text-neutral-500 uppercase">
+                                <tr>
+                                    <th class="px-3 py-2">Name</th>
+                                    <th class="px-3 py-2">DNS Host</th>
+                                    <th class="px-3 py-2">Templates</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-neutral-300">
+                                {% for ca in certificate_authorities %}
+                                <tr class="border-t border-neutral-800">
+                                    <td class="px-3 py-2 font-medium text-white">{{ ca.name }}</td>
+                                    <td class="px-3 py-2 text-xs font-mono text-neutral-400">{{ ca.dns_host }}</td>
+                                    <td class="px-3 py-2 text-xs text-neutral-400">{{ ca.templates_count }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="3" class="px-3 py-4 text-center text-neutral-500">No CAs found</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-
         </div>
     </div>
 </div>

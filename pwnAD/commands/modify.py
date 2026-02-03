@@ -202,6 +202,208 @@ def _toggle_account_enable_disable(conn, user_name, enable):
         check_error(conn, error_code, e)
 
 
+def restore_deleted(conn, target: str, new_name: str = None, new_parent: str = None):
+    """
+    Restore a deleted object from the AD Recycle Bin.
+
+    This function restores a deleted object by:
+    1. Finding it in the Deleted Objects container
+    2. Removing the isDeleted attribute
+    3. Moving it to its original or a new parent container
+
+    Args:
+        conn: LDAP connection object
+        target: Target identifier (sAMAccountName, objectSid, or DN of deleted object)
+        new_name: Optional new name for the restored object (updates sAMAccountName, UPN, SPN)
+        new_parent: Optional new parent container DN (default: original lastKnownParent)
+
+    Note:
+        Requires the following permissions:
+        - "Reanimate Tombstones" right on the domain object
+        - Generic Write on the deleted object
+        - Create Child right on the target container
+
+    Example:
+        modify restore_deleted user1
+        modify restore_deleted S-1-5-21-xxx-1234
+        modify restore_deleted user1 --new-name user1_restored
+        modify restore_deleted user1 --new-parent "OU=Restored,DC=corp,DC=local"
+    """
+    # LDAP control to show deleted objects
+    LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417"
+    show_deleted_control = (LDAP_SERVER_SHOW_DELETED_OID, True, None)
+
+    # Build search filter based on target type
+    target = target.strip()
+    escaped_target = escape_filter_chars(target)
+
+    if target.lower().startswith("cn=") or target.lower().startswith("dc="):
+        # DN - need to double-encode special chars in deleted object DNs
+        ldap_filter = f"(&(isDeleted=TRUE)(distinguishedName={escaped_target}))"
+    elif target.startswith("S-1-"):
+        # SID
+        ldap_filter = f"(&(isDeleted=TRUE)(objectSid={escaped_target}))"
+    else:
+        # sAMAccountName
+        ldap_filter = f"(&(isDeleted=TRUE)(sAMAccountName={escaped_target}))"
+
+    # Search in Deleted Objects container
+    deleted_objects_dn = f"CN=Deleted Objects,{conn._baseDN}"
+
+    attributes = [
+        'distinguishedName',
+        'sAMAccountName',
+        'msDS-LastKnownRDN',
+        'lastKnownParent',
+        'name',
+        'objectClass',
+        'servicePrincipalName',
+        'userPrincipalName',
+        'dNSHostName',
+        'displayName'
+    ]
+
+    try:
+        conn._ldap_connection.search(
+            search_base=deleted_objects_dn,
+            search_filter=ldap_filter,
+            search_scope=ldap3.SUBTREE,
+            attributes=attributes,
+            controls=[show_deleted_control]
+        )
+
+        entries = conn._ldap_connection.entries
+
+        if not entries:
+            logging.error(f"Deleted object not found: {target}")
+            return
+
+        if len(entries) > 1:
+            logging.warning(f"Multiple deleted objects match '{target}'. Using the first one.")
+            for i, entry in enumerate(entries):
+                sam = entry.entry_attributes_as_dict.get('sAMAccountName', [''])[0] if entry.entry_attributes_as_dict.get('sAMAccountName') else ''
+                logging.info(f"  [{i}] {sam} - {entry.entry_dn}")
+
+        entry = entries[0]
+        attrs = entry.entry_attributes_as_dict
+
+        # Get the current values
+        deleted_dn = entry.entry_dn
+        sam_account_name = attrs.get('sAMAccountName', [''])[0] if attrs.get('sAMAccountName') else ''
+        last_known_rdn = attrs.get('msDS-LastKnownRDN', [''])[0] if attrs.get('msDS-LastKnownRDN') else ''
+        last_known_parent = attrs.get('lastKnownParent', [''])[0] if attrs.get('lastKnownParent') else ''
+        name = attrs.get('name', [''])[0] if attrs.get('name') else ''
+        spn_list = attrs.get('servicePrincipalName', [])
+        upn = attrs.get('userPrincipalName', [''])[0] if attrs.get('userPrincipalName') else ''
+        dns_hostname = attrs.get('dNSHostName', [''])[0] if attrs.get('dNSHostName') else ''
+        display_name = attrs.get('displayName', [''])[0] if attrs.get('displayName') else ''
+
+        # Determine the RDN to use for the restored object
+        if new_name:
+            restored_rdn = new_name
+        elif last_known_rdn:
+            restored_rdn = last_known_rdn
+        else:
+            # Extract RDN from the name (before \0ADEL:)
+            if name and '\x0a' in name:
+                restored_rdn = name.split('\x0a')[0]
+            elif name:
+                restored_rdn = name
+            else:
+                logging.error("Cannot determine RDN for restoration")
+                return
+
+        # Determine the parent container
+        if new_parent:
+            restored_parent = new_parent
+        elif last_known_parent:
+            restored_parent = last_known_parent
+        else:
+            logging.error("Cannot determine parent container for restoration. Use --new-parent to specify.")
+            return
+
+        # Build the new DN
+        new_dn = f"CN={restored_rdn},{restored_parent}"
+
+        logging.info(f"Restoring deleted object:")
+        logging.info(f"  Original sAMAccountName: {sam_account_name}")
+        logging.info(f"  Deleted DN: {deleted_dn}")
+        logging.info(f"  New DN: {new_dn}")
+
+        # Build the modification dictionary
+        # The key is to:
+        # 1. Delete the isDeleted attribute
+        # 2. Modify the distinguishedName (move the object)
+        modifications = {
+            'isDeleted': [(ldap3.MODIFY_DELETE, [])],
+            'distinguishedName': [(ldap3.MODIFY_REPLACE, [new_dn])]
+        }
+
+        # If renaming, update related attributes
+        if new_name and new_name != last_known_rdn:
+            # Update displayName if it existed
+            if display_name:
+                new_display_name = display_name.replace(name.split('\x0a')[0] if '\x0a' in name else name, new_name)
+                modifications['displayName'] = [(ldap3.MODIFY_REPLACE, [new_display_name])]
+
+            # Update sAMAccountName
+            if sam_account_name:
+                # Preserve $ suffix for computer accounts
+                if sam_account_name.endswith('$'):
+                    new_sam = new_name + '$' if not new_name.endswith('$') else new_name
+                else:
+                    new_sam = new_name
+                modifications['sAMAccountName'] = [(ldap3.MODIFY_REPLACE, [new_sam])]
+
+            # Update servicePrincipalName
+            if spn_list:
+                old_name_part = name.split('\x0a')[0] if '\x0a' in name else name
+                new_spns = [spn.replace(old_name_part, new_name) for spn in spn_list]
+                modifications['servicePrincipalName'] = [(ldap3.MODIFY_REPLACE, new_spns)]
+
+            # Update userPrincipalName
+            if upn:
+                domain_part = upn.split('@')[-1] if '@' in upn else ''
+                if domain_part:
+                    modifications['userPrincipalName'] = [(ldap3.MODIFY_REPLACE, [f"{new_name}@{domain_part}"])]
+
+            # Update dNSHostName
+            if dns_hostname:
+                domain_suffix = dns_hostname.split('.', 1)[-1] if '.' in dns_hostname else ''
+                if domain_suffix:
+                    modifications['dNSHostName'] = [(ldap3.MODIFY_REPLACE, [f"{new_name}.{domain_suffix}"])]
+
+        # Perform the restore operation
+        try:
+            conn._ldap_connection.modify(
+                deleted_dn,
+                modifications,
+                controls=[show_deleted_control]
+            )
+
+            if conn._ldap_connection.result['result'] == 0:
+                logging.info(f"\x1b[92mSuccessfully restored {sam_account_name or target} to {new_dn}\x1b[0m")
+            else:
+                error_msg = conn._ldap_connection.result.get('message', 'Unknown error')
+                desc = conn._ldap_connection.result.get('description', '')
+                logging.error(f"Failed to restore object: {desc} - {error_msg}")
+
+        except ldap3.core.exceptions.LDAPException as e:
+            error_code = conn._ldap_connection.result['result']
+            if 'userPrincipalName' in str(e) and error_code == 19:
+                logging.error("Restore failed: userPrincipalName is already in use by another object")
+            else:
+                check_error(conn, error_code, e)
+
+    except ldap3.core.exceptions.LDAPException as e:
+        if "noSuchObject" in str(e):
+            logging.error("Deleted Objects container not found. AD Recycle Bin may not be enabled.")
+        else:
+            logging.error(f"LDAP error: {e}")
+    except Exception as e:
+        logging.error(f"Error restoring deleted object: {e}")
+
+
 def attribute(conn, target: str, attr: str, values: list, raw: bool = False, b64: bool = False):
     """
     Replace/set an attribute value on any LDAP object.

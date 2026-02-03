@@ -13,11 +13,11 @@ OBJECT_TYPES = {
         'label': 'Users',
         'icon': 'fas fa-user',
         'filter': '(&(objectCategory=person)(objectClass=user))',
-        'attributes': ['sAMAccountName', 'displayName', 'mail', 'memberOf', 'userAccountControl', 'distinguishedName'],
+        'attributes': ['sAMAccountName', 'cn', 'memberOf', 'userAccountControl', 'distinguishedName'],
         'columns': [
             {'attr': 'sAMAccountName', 'label': 'Username'},
-            {'attr': 'displayName', 'label': 'Display Name'},
-            {'attr': 'mail', 'label': 'Email'},
+            {'attr': 'cn', 'label': 'Common Name'},
+            {'attr': 'distinguishedName', 'label': 'Distinguished Name'},
         ],
         'filters': [
             {'key': 'enabled', 'label': 'Enabled', 'ldap': '(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'},
@@ -161,6 +161,10 @@ def _get_conn():
     return current_app.config['LDAP_CONNECTION']
 
 
+# LDAP control OID for showing deleted objects
+LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417"
+
+
 def _ensure_connected(conn):
     """Check connection and rebind if necessary."""
     if not conn.is_connected():
@@ -191,7 +195,7 @@ def _ldap_search_single(conn, search_base, search_filter, attributes, search_sco
         raise
 
 
-def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0, _retry=True):
+def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0, _retry=True, controls=None):
     """Execute an LDAP search and return list of result dicts.
 
     Automatically attempts to rebind if the connection is lost.
@@ -212,6 +216,7 @@ def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0
                 paged_size=1000,
                 paged_cookie=paged_cookie,
                 size_limit=size_limit,
+                controls=controls,
             )
             for entry in conn._ldap_connection.response:
                 if entry.get('type') != 'searchResEntry':
@@ -221,8 +226,8 @@ def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0
                     'attributes': entry['attributes'],
                 })
 
-            controls = conn._ldap_connection.result.get('controls', {})
-            page_control = controls.get('1.2.840.113556.1.4.319')
+            result_controls = conn._ldap_connection.result.get('controls', {})
+            page_control = result_controls.get('1.2.840.113556.1.4.319')
             if page_control:
                 cookie = page_control['value']['cookie']
                 if cookie:
@@ -235,8 +240,50 @@ def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0
             logging.warning(f"[*] LDAP connection error: {e}, attempting rebind...")
             if conn.rebind():
                 # Retry the search once after rebind
-                return _ldap_search(conn, search_filter, attributes, search_base, size_limit, _retry=False)
+                return _ldap_search(conn, search_filter, attributes, search_base, size_limit, _retry=False, controls=controls)
         raise
+
+    return results
+
+
+def _ldap_search_deleted(conn, search_filter, attributes, _retry=True):
+    """Execute an LDAP search in the Deleted Objects container.
+
+    Uses the LDAP_SERVER_SHOW_DELETED_OID control to enumerate deleted objects.
+    """
+    deleted_objects_dn = f"CN=Deleted Objects,{conn._baseDN}"
+    show_deleted_control = (LDAP_SERVER_SHOW_DELETED_OID, True, None)
+
+    results = []
+
+    try:
+        conn._ldap_connection.search(
+            search_base=deleted_objects_dn,
+            search_filter=search_filter,
+            search_scope=ldap3.SUBTREE,
+            attributes=attributes,
+            controls=[show_deleted_control],
+        )
+        for entry in conn._ldap_connection.response:
+            if entry.get('type') != 'searchResEntry':
+                continue
+            results.append({
+                'dn': entry['dn'],
+                'attributes': entry['attributes'],
+            })
+
+    except LDAP_CONNECTION_ERRORS as e:
+        if _retry:
+            logging.warning(f"[*] LDAP connection error: {e}, attempting rebind...")
+            if conn.rebind():
+                return _ldap_search_deleted(conn, search_filter, attributes, _retry=False)
+        raise
+    except Exception as e:
+        # Silently handle if Deleted Objects container doesn't exist
+        if 'noSuchObject' in str(e):
+            logging.debug("Deleted Objects container not found - AD Recycle Bin may not be enabled")
+        else:
+            raise
 
     return results
 
@@ -425,9 +472,25 @@ def object_detail():
 
     conn = _get_conn()
 
+    # Check if this is a deleted object (DN contains "CN=Deleted Objects")
+    is_deleted_object = 'CN=Deleted Objects' in dn or '\\0ADEL:' in dn
+
     # Search by DN - use the DN as search base with BASE scope
     try:
-        response, _ = _ldap_search_single(conn, dn, '(objectClass=*)', ['*'], ldap3.BASE)
+        if is_deleted_object:
+            # Use show deleted control for deleted objects
+            show_deleted_control = (LDAP_SERVER_SHOW_DELETED_OID, True, None)
+            conn._ldap_connection.search(
+                search_base=dn,
+                search_filter='(objectClass=*)',
+                search_scope=ldap3.BASE,
+                attributes=['*', 'msDS-LastKnownRDN', 'lastKnownParent', 'isDeleted'],
+                controls=[show_deleted_control]
+            )
+            response = conn._ldap_connection.response
+        else:
+            response, _ = _ldap_search_single(conn, dn, '(objectClass=*)', ['*'], ldap3.BASE)
+
         results = []
         for entry in response:
             if entry.get('type') != 'searchResEntry':
@@ -436,7 +499,8 @@ def object_detail():
                 'dn': entry['dn'],
                 'attributes': entry['attributes'],
             })
-    except Exception:
+    except Exception as e:
+        logging.debug(f"Error fetching object: {e}")
         results = []
 
     if not results:
@@ -444,6 +508,7 @@ def object_detail():
 
     ctx = _base_context('object')
     ctx['obj'] = results[0]
+    ctx['is_deleted'] = is_deleted_object or results[0]['attributes'].get('isDeleted') == True
 
     # Fetch owner info from security descriptor
     owner_info = None
@@ -521,76 +586,318 @@ SPECIAL_QUERIES = {
 
 @browse_bp.route('/queries')
 def queries_page():
-    query_name = request.args.get('q', '')
+    """
+    Unified AD objects view with toggle filters.
+    By default, shows all users, computers, and groups.
+    Filters can be toggled to refine results.
+    """
+    conn = _get_conn()
     ctx = _base_context('queries')
-    ctx['current_query'] = query_name
+
+    # Parse active filters from query string
+    filters_param = request.args.get('filters', '')
+    search = request.args.get('search', '').strip()
+    active_filters = [f.strip() for f in filters_param.split(',') if f.strip()]
+
+    ctx['active_filters'] = active_filters
+    ctx['search'] = search
     ctx['results'] = []
-    ctx['query_title'] = ''
-    ctx['query_icon'] = ''
-    ctx['query_color'] = ''
+    ctx['error'] = None
+    ctx['can_read_passwords'] = False
+    ctx['laps_readable'] = []
+    ctx['gmsa_readable'] = []
 
-    if query_name and (query_name in QUERIES or query_name in SPECIAL_QUERIES):
-        conn = _get_conn()
-        meta = QUERY_META.get(query_name, {})
+    # Get current session user for highlighting
+    session_user = ctx.get('session_user', '').lower()
+    # Extract just the username part if it's in domain\user format
+    if '\\' in session_user:
+        session_user = session_user.split('\\')[-1].lower()
+    if '@' in session_user:
+        session_user = session_user.split('@')[0].lower()
 
-        # Get query config from either QUERIES or SPECIAL_QUERIES
-        if query_name in QUERIES:
-            qcfg = QUERIES[query_name]
-        else:
-            qcfg = SPECIAL_QUERIES[query_name]
+    # Define filter queries mapping
+    filter_queries = {
+        'users': '(&(objectCategory=person)(objectClass=user)(!(objectClass=computer)))',
+        'computers': '(objectCategory=computer)',
+        'groups': '(objectCategory=group)',
+        'kerberoastables': '(&(samAccountType=805306368)(servicePrincipalName=*)(!(samAccountName=krbtgt))(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))',
+        'asreproastables': '(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))',
+        'unconstrained': '(&(userAccountControl:1.2.840.113556.1.4.803:=524288)(!(userAccountControl:1.2.840.113556.1.4.803:=8192)))',
+        'constrained': '(&(objectClass=user)(msDS-AllowedToDelegateTo=*))',
+        'rbcd': '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)',
+        'admin_count': '(&(objectClass=user)(adminCount=1)(!(sAMAccountName=krbtgt)))',
+        'protected_users': f'(&(objectCategory=person)(objectClass=user)(memberOf:1.2.840.113556.1.4.1941:=CN=Protected Users,CN=Users,{conn._baseDN}))',
+        'laps': '(&(objectCategory=computer)(|(ms-MCS-AdmPwd=*)(msLAPS-Password=*)(msLAPS-EncryptedPassword=*)))',
+        'gmsa': '(&(ObjectClass=msDS-GroupManagedServiceAccount))',
+        'deleted': '(isDeleted=TRUE)',  # Special filter for deleted objects
+    }
 
-        try:
-            raw_results = _ldap_search(conn, qcfg['filter'].format(base_dn=conn._baseDN), qcfg['attributes'] + ['objectClass'])
-        except Exception as e:
-            error_msg = str(e)
-            if query_name == 'laps' and 'invalid attribute type' in error_msg.lower():
-                ctx['error'] = 'LAPS is not configured on this domain'
+    # Build the LDAP filter based on active filters
+    if not active_filters:
+        # Default: show all users, computers, groups
+        ldap_filter = '(|(objectCategory=person)(objectCategory=computer)(objectCategory=group))'
+    else:
+        # Check if we have object type filters
+        type_filters = [f for f in active_filters if f in ('users', 'computers', 'groups')]
+        query_filters = [f for f in active_filters if f not in ('users', 'computers', 'groups')]
+
+        if type_filters and not query_filters:
+            # Only object type filters - OR them together
+            type_parts = [filter_queries[f] for f in type_filters]
+            ldap_filter = f'(|{"".join(type_parts)})'
+        elif query_filters and not type_filters:
+            # Only query filters - OR them together
+            query_parts = [filter_queries[f] for f in query_filters if f in filter_queries]
+            if query_parts:
+                ldap_filter = f'(|{"".join(query_parts)})'
             else:
-                ctx['error'] = f'Query error: {error_msg}'
-            raw_results = []
+                ldap_filter = '(|(objectCategory=person)(objectCategory=computer)(objectCategory=group))'
+        else:
+            # Both types - combine appropriately
+            # Object type filters restrict the base, query filters are additional constraints
+            type_parts = [filter_queries[f] for f in type_filters]
+            query_parts = [filter_queries[f] for f in query_filters if f in filter_queries]
+            if query_parts:
+                ldap_filter = f'(|{"".join(query_parts)})'
+            else:
+                ldap_filter = f'(|{"".join(type_parts)})'
 
-        # Transform results for the new template
-        results = []
-        for r in raw_results:
-            attrs = r.get('attributes', {})
-            obj_classes = attrs.get('objectClass', [])
-            obj_type = 'object'
-            if 'computer' in obj_classes:
-                obj_type = 'computer'
-            elif 'group' in obj_classes:
-                obj_type = 'group'
-            elif 'msDS-GroupManagedServiceAccount' in obj_classes:
-                obj_type = 'gmsa'
-            elif 'user' in obj_classes or 'person' in obj_classes:
-                obj_type = 'user'
+    # Add search filter if provided
+    if search:
+        escaped = escape_filter_chars(search)
+        ldap_filter = f'(&{ldap_filter}(|(sAMAccountName=*{escaped}*)(cn=*{escaped}*)(distinguishedName=*{escaped}*)))'
 
-            # Handle description which can be a list
-            desc = attrs.get('description', '')
-            if isinstance(desc, list):
-                desc = desc[0] if desc else ''
+    # Determine attributes to fetch based on active filters
+    base_attrs = ['sAMAccountName', 'cn', 'distinguishedName', 'objectClass', 'userAccountControl', 'adminCount', 'servicePrincipalName', 'msDS-AllowedToDelegateTo', 'msDS-AllowedToActOnBehalfOfOtherIdentity', 'memberOf']
 
-            # Handle LAPS password (legacy or new)
-            laps_pwd = attrs.get('ms-Mcs-AdmPwd', '') or attrs.get('msLAPS-Password', '')
-            if isinstance(laps_pwd, list):
-                laps_pwd = laps_pwd[0] if laps_pwd else ''
+    # Add LAPS attributes if laps filter is active
+    if 'laps' in active_filters:
+        base_attrs.extend(['ms-Mcs-AdmPwd', 'msLAPS-Password', 'msLAPS-EncryptedPassword'])
 
-            results.append({
-                'dn': r.get('dn', ''),
-                'sam': attrs.get('sAMAccountName', ''),
-                'name': attrs.get('sAMAccountName', attrs.get('cn', '')),
-                'type': obj_type,
-                'spn': attrs.get('servicePrincipalName', ''),
-                'allowed_to': attrs.get('msDS-AllowedToDelegateTo', ''),
-                'description': desc,
-                'laps_password': laps_pwd,
-            })
+    # Add gMSA attributes if gmsa filter is active
+    if 'gmsa' in active_filters:
+        base_attrs.extend(['msDS-GroupMSAMembership', 'msDS-ManagedPassword'])
 
-        ctx['results'] = results
-        ctx['query_title'] = meta.get('title', qcfg.get('title', query_name))
-        ctx['query_icon'] = meta.get('icon', 'fa-database')
-        ctx['query_color'] = meta.get('color', 'text-neutral-400')
+    # Add deleted object attributes if deleted filter is active
+    if 'deleted' in active_filters:
+        base_attrs.extend(['isDeleted', 'msDS-LastKnownRDN', 'lastKnownParent', 'whenChanged'])
 
+    try:
+        raw_results = _ldap_search(conn, ldap_filter, list(set(base_attrs)))
+    except Exception as e:
+        error_msg = str(e)
+        if 'invalid attribute type' in error_msg.lower():
+            ctx['error'] = 'Some attributes are not available on this domain'
+        else:
+            ctx['error'] = f'Query error: {error_msg}'
+        raw_results = []
+
+    # If 'deleted' filter is active, also search deleted objects
+    deleted_dns = set()
+    if 'deleted' in active_filters:
+        try:
+            deleted_filter = '(isDeleted=TRUE)'
+            if search:
+                escaped = escape_filter_chars(search)
+                deleted_filter = f'(&(isDeleted=TRUE)(|(sAMAccountName=*{escaped}*)(cn=*{escaped}*)(name=*{escaped}*)))'
+
+            deleted_attrs = ['sAMAccountName', 'cn', 'distinguishedName', 'objectClass', 'name',
+                           'msDS-LastKnownRDN', 'lastKnownParent', 'whenChanged', 'isDeleted', 'objectSid']
+            deleted_results = _ldap_search_deleted(conn, deleted_filter, deleted_attrs)
+
+            for r in deleted_results:
+                deleted_dns.add(r['dn'].lower())
+                raw_results.append(r)
+        except Exception as e:
+            logging.debug(f"Error searching deleted objects: {e}")
+
+    # Pre-fetch data for special queries to tag objects
+    special_data = {}
+    for query_name in ['kerberoastables', 'asreproastables', 'unconstrained', 'constrained', 'rbcd', 'admin_count', 'protected_users']:
+        if query_name in QUERIES:
+            try:
+                query_results = _ldap_search(conn, QUERIES[query_name]['filter'].format(base_dn=conn._baseDN), ['distinguishedName'])
+                special_data[query_name] = {r['dn'].lower() for r in query_results}
+            except Exception:
+                special_data[query_name] = set()
+
+    # Check LAPS readable computers
+    laps_readable_dns = set()
+    if 'laps' in active_filters:
+        try:
+            laps_results = _ldap_search(conn, filter_queries['laps'], ['distinguishedName', 'sAMAccountName', 'ms-Mcs-AdmPwd', 'msLAPS-Password'])
+            for r in laps_results:
+                attrs = r.get('attributes', {})
+                pwd = attrs.get('ms-Mcs-AdmPwd', '') or attrs.get('msLAPS-Password', '')
+                if pwd:
+                    laps_readable_dns.add(r['dn'].lower())
+                    ctx['laps_readable'].append({
+                        'dn': r['dn'],
+                        'name': attrs.get('sAMAccountName', ''),
+                        'password': pwd if isinstance(pwd, str) else (pwd[0] if pwd else '')
+                    })
+        except Exception:
+            pass
+
+    # Check gMSA readable accounts
+    gmsa_readable_dns = set()
+    if 'gmsa' in active_filters:
+        try:
+            gmsa_results = _ldap_search(conn, filter_queries['gmsa'], ['distinguishedName', 'sAMAccountName', 'msDS-ManagedPassword'])
+            for r in gmsa_results:
+                attrs = r.get('attributes', {})
+                pwd = attrs.get('msDS-ManagedPassword', '')
+                if pwd:
+                    gmsa_readable_dns.add(r['dn'].lower())
+                    ctx['gmsa_readable'].append({
+                        'dn': r['dn'],
+                        'name': attrs.get('sAMAccountName', ''),
+                        'password': '[Binary - requires processing]'
+                    })
+        except Exception:
+            pass
+
+    ctx['can_read_passwords'] = bool(ctx['laps_readable'] or ctx['gmsa_readable'])
+
+    # Transform results
+    results = []
+    for r in raw_results:
+        attrs = r.get('attributes', {})
+        obj_classes = attrs.get('objectClass', [])
+        if isinstance(obj_classes, str):
+            obj_classes = [obj_classes]
+        obj_classes_lower = [c.lower() for c in obj_classes]
+        dn_lower = r.get('dn', '').lower()
+
+        # Determine object type
+        obj_type = 'object'
+        if 'computer' in obj_classes_lower:
+            obj_type = 'computer'
+        elif 'group' in obj_classes_lower:
+            obj_type = 'group'
+        elif 'msds-groupmanagedserviceaccount' in obj_classes_lower:
+            obj_type = 'gmsa'
+        elif 'user' in obj_classes_lower or 'person' in obj_classes_lower:
+            obj_type = 'user'
+
+        # Build tags for the object
+        tags = []
+        if dn_lower in special_data.get('kerberoastables', set()):
+            tags.append('Kerberoastable')
+        if dn_lower in special_data.get('asreproastables', set()):
+            tags.append('AS-REP')
+        if dn_lower in special_data.get('unconstrained', set()):
+            tags.append('Unconstrained')
+        if dn_lower in special_data.get('constrained', set()):
+            tags.append('Constrained')
+        if dn_lower in special_data.get('rbcd', set()):
+            tags.append('RBCD')
+        if dn_lower in special_data.get('admin_count', set()):
+            tags.append('AdminCount')
+        if dn_lower in special_data.get('protected_users', set()):
+            tags.append('Protected')
+
+        # LAPS tag
+        has_laps = False
+        can_read_laps = False
+        if obj_type == 'computer':
+            laps_pwd = attrs.get('ms-Mcs-AdmPwd', '') or attrs.get('msLAPS-Password', '') or attrs.get('msLAPS-EncryptedPassword', '')
+            if laps_pwd:
+                has_laps = True
+                can_read_laps = True
+                tags.append('LAPS')
+
+        # gMSA tag
+        can_read_gmsa = False
+        if obj_type == 'gmsa' or 'msds-groupmanagedserviceaccount' in obj_classes_lower:
+            obj_type = 'gmsa'
+            tags.append('gMSA')
+            if attrs.get('msDS-ManagedPassword'):
+                can_read_gmsa = True
+
+        # Check if this object is deleted
+        is_deleted = dn_lower in deleted_dns or attrs.get('isDeleted') == True
+        if is_deleted:
+            tags.insert(0, 'Deleted')  # Add 'Deleted' tag at the beginning
+
+        # Check if this is the current session user
+        sam = attrs.get('sAMAccountName', '')
+        # For deleted objects, the name might be in msDS-LastKnownRDN
+        display_name = sam or attrs.get('msDS-LastKnownRDN', '') or attrs.get('cn', '') or attrs.get('name', '')
+        # Exact comparison - don't strip $ to avoid highlighting machine accounts (e.g. test$ when user is test)
+        is_current_user = sam.lower() == session_user.lower() if sam else False
+
+        results.append({
+            'dn': r.get('dn', ''),
+            'sam': sam,
+            'name': display_name,
+            'type': obj_type,
+            'tags': tags,
+            'spn': attrs.get('servicePrincipalName', ''),
+            'allowed_to': attrs.get('msDS-AllowedToDelegateTo', ''),
+            'has_laps': has_laps,
+            'can_read_laps': can_read_laps,
+            'can_read_gmsa': can_read_gmsa,
+            'is_current_user': is_current_user,
+            'is_deleted': is_deleted,
+            'last_known_parent': attrs.get('lastKnownParent', '') if is_deleted else '',
+        })
+
+    # Sort results: current user first, then by name
+    results.sort(key=lambda x: (not x['is_current_user'], x['sam'].lower() if x['sam'] else x['name'].lower()))
+
+    ctx['results'] = results
     return render_template('queries.html', **ctx)
+
+
+@browse_bp.route('/api/readable-passwords')
+def api_readable_passwords():
+    """
+    API endpoint to fetch readable LAPS and gMSA passwords.
+    Returns JSON with lists of readable passwords.
+    """
+    conn = _get_conn()
+    result = {
+        'laps': [],
+        'gmsa': [],
+        'error': None
+    }
+
+    # Fetch LAPS passwords
+    try:
+        laps_filter = '(&(objectCategory=computer)(|(ms-MCS-AdmPwd=*)(msLAPS-Password=*)))'
+        laps_results = _ldap_search(conn, laps_filter, ['sAMAccountName', 'distinguishedName', 'ms-Mcs-AdmPwd', 'msLAPS-Password'])
+        for r in laps_results:
+            attrs = r.get('attributes', {})
+            pwd = attrs.get('ms-Mcs-AdmPwd', '') or attrs.get('msLAPS-Password', '')
+            if isinstance(pwd, list):
+                pwd = pwd[0] if pwd else ''
+            if pwd:
+                result['laps'].append({
+                    'name': attrs.get('sAMAccountName', ''),
+                    'dn': r.get('dn', ''),
+                    'password': pwd
+                })
+    except Exception as e:
+        if 'invalid attribute type' not in str(e).lower():
+            result['error'] = f'LAPS error: {e}'
+
+    # Fetch gMSA accounts (password requires special handling)
+    try:
+        gmsa_filter = '(&(ObjectClass=msDS-GroupManagedServiceAccount))'
+        gmsa_results = _ldap_search(conn, gmsa_filter, ['sAMAccountName', 'distinguishedName', 'msDS-ManagedPassword'])
+        for r in gmsa_results:
+            attrs = r.get('attributes', {})
+            pwd = attrs.get('msDS-ManagedPassword', '')
+            result['gmsa'].append({
+                'name': attrs.get('sAMAccountName', ''),
+                'dn': r.get('dn', ''),
+                'password': '[Requires TLS and special processing]' if not pwd else '[Binary data - hash extraction needed]'
+            })
+    except Exception as e:
+        pass  # gMSA errors are non-critical
+
+    return jsonify(result)
 
 
 @browse_bp.route('/query/<query_name>')
@@ -671,7 +978,8 @@ def writable_view():
     ctx['partition'] = request.args.get('partition', 'DOMAIN').strip()
     ctx['results'] = None
 
-    if request.args.get('search'):
+    # Always run search by default
+    if True:
         try:
             otype = ctx['otype']
             right = ctx['right']
@@ -879,7 +1187,7 @@ def _custom_query():
         try:
             results = _ldap_search(conn, filter_str, columns)
         except Exception as e:
-            pass
+            logging.error(f"[!] Custom query error: {e} - filter: {repr(filter_str)}")
 
     display_columns = [c for c in columns if c != 'distinguishedName']
 

@@ -7,7 +7,7 @@ from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.accesscontrol import *
-from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value, LDAPOperationError
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE
 
 
@@ -92,15 +92,15 @@ def dcsync(conn, trustee):
     targetDN, targetSID = conn.ldap_get_user(trustee)
     logging.debug(f"targetSID : {targetSID}")
 
-    res = conn.search(search_base=conn._baseDN, 
-                      search_filter=f'(distinguishedName={conn._baseDN})', 
+    res = conn.search(search_base=conn._baseDN,
+                      search_filter=f'(distinguishedName={conn._baseDN})',
                       attributes=['nTSecurityDescriptor'])
     if res is None:
-        logging.error('Failed to get forest\'s SD')
+        raise LDAPOperationError('Failed to get forest\'s SD')
 
     baseDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
     if baseDN_sd['nTSecurityDescriptor'] == []:
-        raise Exception("User doesn't have right to read nTSecurityDescriptor!")
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
     sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=baseDN_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
@@ -144,12 +144,11 @@ def genericAll(conn, target, trustee):
         attributes=['nTSecurityDescriptor']
     )
     if res is None:
-        logging.error("Failed to get target's SD")
-        return
+        raise LDAPOperationError("Failed to get target's SD")
 
     targetDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
     if targetDN_sd['nTSecurityDescriptor'] == []:
-        raise Exception("Cannot read nTSecurityDescriptor!")
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
     sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetDN_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
@@ -186,9 +185,7 @@ def uac(conn, target: str, flags: list):
     for flag in flags:
         flag_upper = flag.upper()
         if flag_upper not in ACCOUNT_FLAGS:
-            logging.error(f"Unknown UAC flag: {flag}")
-            logging.info(f"Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
-            return
+            raise LDAPOperationError(f"Unknown UAC flag: {flag}. Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
         uac_to_remove |= ACCOUNT_FLAGS[flag_upper]
 
     # Search for the target and get current userAccountControl
@@ -199,8 +196,7 @@ def uac(conn, target: str, flags: list):
     )
 
     if not conn._ldap_connection.entries:
-        logging.error(f"Target '{target}' not found in LDAP")
-        return
+        raise LDAPOperationError(f"Target '{target}' not found in LDAP")
 
     entry = conn._ldap_connection.entries[0]
     target_dn = entry.entry_dn
@@ -208,8 +204,7 @@ def uac(conn, target: str, flags: list):
     try:
         old_uac = entry['userAccountControl'].value
     except (KeyError, IndexError):
-        logging.error(f"Cannot read userAccountControl attribute for '{target}'")
-        return
+        raise LDAPOperationError(f"Cannot read userAccountControl attribute for '{target}'")
 
     # Remove flags using bitwise AND with NOT
     new_uac = old_uac & ~uac_to_remove
@@ -239,8 +234,7 @@ def RBCD(conn, computer_name):
     """
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(computer_name), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])
     if success is False or len(conn._ldap_connection.entries) != 1:
-        logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
-        return
+        raise LDAPOperationError(f"Target '{computer_name}' not found")
 
     target = conn._ldap_connection.entries[0]
     target_sid = target["objectsid"].value
