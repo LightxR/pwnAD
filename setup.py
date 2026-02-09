@@ -20,6 +20,7 @@ setup(
         "pyasn1==0.4.8",
         "dsinternals",
         "flask",
+        "waitress",
     ],
     packages=[
         "pwnAD",
