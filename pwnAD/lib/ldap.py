@@ -1,9 +1,10 @@
-import datetime 
+import datetime
 import ldap3
 from ldap3.utils.conv import escape_filter_chars
 import logging
 import os
 import ssl
+import struct
 import sys
 import tempfile
 from typing import Any, List, Union
@@ -16,11 +17,125 @@ class LDAPAuthenticationError(Exception):
     pass
 
 
+class _KerberosSealSocket:
+    """
+    Socket wrapper that applies GSS-API sealing to all LDAP PDUs.
+
+    Delegates to impacket's GSSAPI_AES* (RFC 4121, key_usages 22/24) or
+    GSSAPI_RC4 (RFC 4757 old-format tokens) depending on the session cipher,
+    ensuring the correct wire format for each enctype.
+
+    SASL wire framing: each PDU is prefixed with a 4-byte big-endian length.
+    """
+
+    def __init__(self, sock, gss, session_key):
+        self._sock = sock
+        self._gss = gss
+        self._session_key = session_key
+        self._seq_num = 0
+        self._buf = b''
+
+    def _wrap(self, data):
+        payload, header = self._gss.GSS_Wrap_LDAP(self._session_key, data, self._seq_num)
+        self._seq_num += 1
+        return header + payload
+
+    def _unwrap(self, token):
+        from impacket.krb5.gssapi import GSSAPI_RC4
+        if isinstance(self._gss, GSSAPI_RC4):
+            # impacket's MechIndepToken.from_bytes() has an off-by-one BER length
+            # bug: for tokens with single-byte length encoding (content < 128 bytes)
+            # it does not advance past the length byte, so the WRAP header is parsed
+            # 4 bytes off → wrong SGN_CKSUM/SND_SEQ → wrong Kcrypt → garbage output.
+            # Bypass it and parse the BER structure ourselves.
+            return self._unwrap_rc4(token)
+        data, _ = self._gss.GSS_Unwrap_LDAP(self._session_key, token, 0)
+        return data
+
+    def _unwrap_rc4(self, data):
+        """Correct RC4-HMAC GSS_Unwrap for LDAP tokens (RFC 4757)."""
+        from Cryptodome.Hash import HMAC as _HMAC, MD5 as _MD5
+        from Cryptodome.Cipher import ARC4 as _ARC4
+
+        # Parse outer GSSAPI APPLICATION token:
+        # 0x60 [BER_len] 0x06 [oid_len] [oid_bytes] [WRAP_token]
+        if not data or data[0] != 0x60:
+            raise ValueError(f'Expected GSSAPI APPLICATION tag 0x60, got 0x{data[0]:02x}')
+        i = 1
+        if data[i] < 0x80:
+            i += 1                     # single-byte length — skip it
+        else:
+            i += 1 + (data[i] & 0x7f) # multi-byte — skip the extra length bytes too
+        if data[i] != 0x06:
+            raise ValueError(f'Expected OID tag 0x06, got 0x{data[i]:02x}')
+        i += 2 + data[i + 1]           # skip OID tag + length + value
+
+        # RC4 WRAP token layout (32-byte header + ciphertext):
+        #   [0:2]   TOK_ID      (0x0102)
+        #   [2:4]   SGN_ALG     (0x0000 = HMAC-MD5)
+        #   [4:6]   SEAL_ALG    (0x0010 = RC4)
+        #   [6:8]   Filler      (0xffff)
+        #   [8:16]  SND_SEQ     (enc sequence number, 8 bytes)
+        #   [16:24] SGN_CKSUM   (HMAC signature, 8 bytes)
+        #   [24:32] Confounder  (encrypted, 8 bytes)
+        #   [32:]   Ciphertext  (encrypted data + trailing 0x01 byte)
+        wrap = data[i:]
+        sgn_cksum   = wrap[16:24]
+        snd_seq_enc = wrap[8:16]
+        confounder  = wrap[24:32]
+        ciphertext  = wrap[32:]
+
+        key = self._session_key
+        Klocal = bytes(b ^ 0xF0 for b in key.contents)
+
+        Kseq = _HMAC.new(key.contents, b'\x00\x00\x00\x00', _MD5).digest()
+        Kseq = _HMAC.new(Kseq, sgn_cksum, _MD5).digest()
+        snd_seq = _ARC4.new(Kseq).encrypt(snd_seq_enc)
+
+        Kcrypt = _HMAC.new(Klocal, b'\x00\x00\x00\x00', _MD5).digest()
+        Kcrypt = _HMAC.new(Kcrypt, snd_seq[:4], _MD5).digest()
+
+        # Feed enc_confounder to advance RC4 state, then decrypt ciphertext from pos 8
+        plaintext = _ARC4.new(Kcrypt).decrypt(confounder + ciphertext)[8:]
+        return plaintext[:-1]  # strip trailing 0x01 added by GSS_Wrap_LDAP
+
+    def sendall(self, data, *args, **kwargs):
+        wrapped = self._wrap(data)
+        return self._sock.sendall(struct.pack('>I', len(wrapped)) + wrapped, *args, **kwargs)
+
+    def send(self, data, *args, **kwargs):
+        wrapped = self._wrap(data)
+        frame = struct.pack('>I', len(wrapped)) + wrapped
+        sent = self._sock.send(frame, *args, **kwargs)
+        return len(data) if sent == len(frame) else 0
+
+    def recv(self, bufsize, *args, **kwargs):
+        while len(self._buf) < 4:
+            chunk = self._sock.recv(4096)
+            if not chunk:
+                return b''
+            self._buf += chunk
+        msg_len = struct.unpack('>I', self._buf[:4])[0]
+        self._buf = self._buf[4:]
+        while len(self._buf) < msg_len:
+            chunk = self._sock.recv(4096)
+            if not chunk:
+                return b''
+            self._buf += chunk
+        wrapped, self._buf = self._buf[:msg_len], self._buf[msg_len:]
+        return self._unwrap(wrapped)
+
+    def __getattr__(self, name):
+        return getattr(self._sock, name)
+
+
 # Kerberos auth
 from pyasn1.codec.ber import encoder, decoder
-from pyasn1.type.univ import noValue        
+from pyasn1.type.univ import noValue
+from pyasn1.type import tag as asn1tag
 from impacket.krb5.ccache import CCache
-from impacket.krb5.asn1 import AP_REQ, Authenticator, TGS_REP, seq_set
+from impacket.krb5.asn1 import AP_REQ, Authenticator, Checksum as KrbChecksum, TGS_REP, seq_set
+from impacket.krb5.gssapi import GSSAPI
 from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
 from impacket.krb5 import constants
 from impacket.krb5.types import Principal, KerberosTime, Ticket
@@ -181,14 +296,20 @@ class LDAPConnection:
         
         return ldap_server, ldap_connection
 
+    @staticmethod
+    def _compute_gss_checksum():
+        """
+        GSS-API authenticator checksum (RFC 4121 §4.1.1.1, cksumtype=0x8003).
+        Bnd is 16 zero bytes (no channel binding needed for Kerberos — the
+        ticket is already SPN-bound).  Flags: REPLAY|SEQUENCE|CONF|INTEG.
+        """
+        flags = 0x3C   # REPLAY=0x04 | SEQUENCE=0x08 | CONF=0x10 | INTEG=0x20
+        return struct.pack('<I', 16) + b'\x00' * 16 + struct.pack('<I', flags)
+
     def _kerberos_auth(self, ldap_scheme, seal_and_sign=False, TGT=None, TGS=None, useCache=True):
 
         logging.debug(f"LDAP authentication with Kerberos: ldap_scheme = {ldap_scheme} / seal_and_sign = {seal_and_sign}")
         self.user = f"{self.ldap_user}@{self.domain.upper()}"
-        ldap_connection_kwargs = {'user': self.user}
-
-        if seal_and_sign:
-            ldap_connection_kwargs['session_security'] = ldap3.ENCRYPT
 
         if self._do_tls:
             use_ssl = True
@@ -200,18 +321,21 @@ class LDAPConnection:
         else:
             use_ssl = False
             tls = None
-    
+
         ldap_server = ldap3.Server(
             host=self.target,
             port=self.port,
             use_ssl=use_ssl,
             get_info=ldap3.ALL,
-            tls=tls            
+            tls=tls
         )
         logging.debug(f"LDAP binding parameters: server = {self.target} / user = {self.user}")
         ldap_connection = ldap3.Connection(server=ldap_server)
-        ldap_connection.bind()
 
+        # Open explicitly so we can access the TLS socket before binding
+        ldap_connection.open(read_server_info=False)
+
+        ldap_connection.bind()
 
         if TGT is not None or TGS is not None or self.aesKey is not None:
             useCache = False
@@ -243,8 +367,7 @@ class LDAPConnection:
             cipher = TGS['cipher']
             sessionKey = TGS['sessionKey']
 
-            # Let's build a NegTokenInit with a Kerberos REQ_AP
-
+        # Let's build a NegTokenInit with a Kerberos REQ_AP
         blob = SPNEGO_NegTokenInit()
 
         # Kerberos
@@ -260,7 +383,7 @@ class LDAPConnection:
         apReq['pvno'] = 5
         apReq['msg-type'] = int(constants.ApplicationTagNumbers.AP_REQ.value)
 
-        opts = []
+        opts = []   # No AP_OPTS_MUTUAL_REQUIRED — impacket uses none for sealing
         apReq['ap-options'] = constants.encodeFlags(opts)
         seq_set(apReq, 'ticket', ticket.to_asn1)
 
@@ -272,6 +395,28 @@ class LDAPConnection:
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+        # Include GSS-API checksum when sealing is requested so the server
+        # knows to enter confidentiality+integrity mode (CONF|INTEG flags).
+        # KrbChecksum() needs an explicit context tag [3] to match the
+        # Authenticator cksum field schema.
+        if seal_and_sign:
+            cksum = KrbChecksum().subtype(
+                explicitTag=asn1tag.Tag(
+                    asn1tag.tagClassContext, asn1tag.tagFormatConstructed, 3
+                )
+            )
+            cksum['cksumtype'] = 0x8003
+            cksum['checksum'] = self._compute_gss_checksum()
+            authenticator.setComponentByName('cksum', cksum)
+
+        # seq-number=0 is required so Windows initialises its GSSAPI sealing
+        # context sequence-number tracking.  Without it, Windows may not enter
+        # sealed mode and will send raw (unencrypted) LDAP responses, which our
+        # SASL-frame reader misparses as a multi-gigabyte frame.
+        # Impacket's kerberosLogin() always sets this to 0.
+        if seal_and_sign:
+            authenticator['seq-number'] = 0
 
         encodedAuthenticator = encoder.encode(authenticator)
 
@@ -297,11 +442,41 @@ class LDAPConnection:
         ldap_connection.sasl_in_progress = True
         response = ldap_connection.post_send_single_response(ldap_connection.send('bindRequest', request, None))
         ldap_connection.sasl_in_progress = False
-        if response[0]['result'] != 0:
+
+        result_code = response[0]['result']
+
+        if result_code == 8:  # strongAuthRequired – server enforces LDAP signing
+            logging.debug('Server requires LDAP signing')
+            if not seal_and_sign:
+                logging.debug('Retrying with Kerberos GSS-API sealing')
+                self._kerberos_auth(ldap_scheme, seal_and_sign=True, useCache=useCache)
+                return
+            if ldap_scheme != 'ldaps':
+                logging.debug('GSS-API sealing failed, falling back to LDAPS')
+                self._do_tls = True
+                self.port = 636
+                self._kerberos_auth('ldaps', seal_and_sign=False, useCache=useCache)
+                return
+            raise LDAPAuthenticationError(f"Server requires LDAP signing: {response}")
+
+        elif result_code == 49:  # invalidCredentials
+            raise LDAPAuthenticationError(f"Kerberos authentication failed (invalidCredentials): {response}")
+
+        elif result_code != 0:
             raise LDAPAuthenticationError(f"Kerberos bind failed: {response}")
 
         ldap_connection.bound = True
         ldap_connection.raise_exceptions = True
+
+        if seal_and_sign:
+            logging.debug('Installing Kerberos GSS-API sealing on LDAP connection')
+            # Use the TGS session key directly (no AP_OPTS_MUTUAL_REQUIRED, so
+            # no AP_REP subkey).  This matches impacket's own LDAP sealing
+            # approach and is what Windows DC expects for SASL encryption.
+            gss = GSSAPI(cipher)
+            ldap_connection.socket = _KerberosSealSocket(
+                ldap_connection.socket, gss, sessionKey
+            )
 
         who_am_i = ldap_connection.extend.standard.who_am_i()
 
