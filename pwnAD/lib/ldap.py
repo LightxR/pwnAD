@@ -821,7 +821,7 @@ class LDAPConnection:
                 return False
 
     def domaindump(self):
-        #todo : improve code logic
+        # TODO: improve code logic
         server = ldap3.Server(self.target, get_info=ldap3.ALL)
         connection = ldap3.Connection(server)
         try:

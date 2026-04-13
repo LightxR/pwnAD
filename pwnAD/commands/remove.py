@@ -24,14 +24,14 @@ def computer(conn, computer_name):
 
     res = conn.exists(computer_name)
     if not res:
-        logging.error(f"Account %s not found in %s!" % (computer_name, conn._baseDN))
+        logging.error(f"Account {computer_name} not found in {conn._baseDN}!")
         return
 
     computer = conn.get(computer_name)
     logging.debug(f"LDAP result for computer : {computer}")
     try:
         conn.delete(computer.entry_dn)
-        logging.info("Successfully deleted %s." % computer_name)
+        logging.info(f"Successfully deleted {computer_name}.")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -47,7 +47,7 @@ def user(conn, user_name):
     """
     res = conn.exists(user_name)
     if not res:
-        logging.error("Account %s not found in %s!" % (user_name, conn._baseDN))
+        logging.error(f"Account {user_name} not found in {conn._baseDN}!")
         return
 
     user= conn.get(user_name)
@@ -55,7 +55,7 @@ def user(conn, user_name):
 
     try:
         conn.delete(user.entry_dn)
-        logging.info("Successfully deleted %s." % user_name)
+        logging.info(f"Successfully deleted {user_name}.")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -135,37 +135,37 @@ def genericAll(conn, target, trustee):
         target: sAMAccountName of the target object
         trustee: sAMAccountName of the user to remove rights from
     """
-    _, trusteeSID = conn.ldap_get_user(trustee)
-    targetDN, _ = conn.ldap_get_user(target)
+    _, trustee_sid = conn.ldap_get_user(trustee)
+    target_dn, _ = conn.ldap_get_user(target)
 
     res = conn.search(
-        search_base=targetDN,
-        search_filter=f'(distinguishedName={targetDN})',
+        search_base=target_dn,
+        search_filter=f'(distinguishedName={target_dn})',
         attributes=['nTSecurityDescriptor']
     )
     if res is None:
         raise LDAPOperationError("Failed to get target's SD")
 
-    targetDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
-    if targetDN_sd['nTSecurityDescriptor'] == []:
+    target_sd = conn._ldap_connection.entries[0].entry_raw_attributes
+    if target_sd['nTSecurityDescriptor'] == []:
         raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
-    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetDN_sd['nTSecurityDescriptor'][0])
+    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
 
     original_count = len(new_sd['Dacl'].aces)
     new_sd['Dacl'].aces = [
         ace for ace in new_sd['Dacl'].aces
-        if not (ace['Ace']['Sid'].formatCanonical() == trusteeSID and ace['Ace']['Mask']['Mask'] & ACCESS_FLAGS["FULL_CONTROL"])
+        if not (ace['Ace']['Sid'].formatCanonical() == trustee_sid and ace['Ace']['Mask']['Mask'] & ACCESS_FLAGS["FULL_CONTROL"])
     ]
 
     if len(new_sd['Dacl'].aces) == original_count:
-        logging.warning("No GenericAll rights found for '%s' on '%s'" % (trustee, target))
+        logging.warning(f"No GenericAll rights found for '{trustee}' on '{target}'")
         return
 
     try:
-        conn.modify(targetDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
-        logging.info("Removed GenericAll rights for '%s' on '%s'!" % (trustee, target))
+        conn.modify(target_dn, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
+        logging.info(f"Removed GenericAll rights for '{trustee}' on '{target}'!")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -238,8 +238,8 @@ def RBCD(conn, computer_name):
 
     target = conn._ldap_connection.entries[0]
     target_sid = target["objectsid"].value
-    logging.info("Found Target DN: %s" % target.entry_dn)
-    logging.info("Target SID: %s\n" % target_sid)
+    logging.info(f"Found Target DN: {target.entry_dn}")
+    logging.info(f"Target SID: {target_sid}\n")
 
     sd = create_empty_sd()
 

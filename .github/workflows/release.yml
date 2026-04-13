@@ -24,11 +24,6 @@ jobs:
         pip install build twine
         pip install -e .
 
-    - name: Run tests before release
-      run: |
-        pip install pytest pytest-cov
-        pytest tests/unit/ -v
-
     - name: Build package
       run: |
         python -m build

@@ -3,12 +3,14 @@ import ldap3
 import random
 import string
 import logging
+from pwnAD.lib.logger import BRIGHT_GREEN, RESET
 from impacket.ldap import ldaptypes
 from ldap3 import MODIFY_REPLACE
 from ldap3.utils.conv import escape_filter_chars
 from ldap3.protocol.microsoft import security_descriptor_control
 from ldap3.protocol.formatters.formatters import format_sid
 
+from pwnAD.lib.accesscontrol import ACCOUNT_FLAGS
 from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
 
 
@@ -27,8 +29,8 @@ def password(conn, account, new_password):
     targetDN, _ = conn.ldap_get_user(account)
 
     try:
-        conn.modify(targetDN, {'unicodePwd': [(ldap3.MODIFY_REPLACE, ['"{}"'.format(new_password).encode('utf-16-le')])]})
-        logging.info("Successfully changed password for %s" % account)
+        conn.modify(targetDN, {'unicodePwd': [(ldap3.MODIFY_REPLACE, [f'"{new_password}"'.encode('utf-16-le')])]})
+        logging.info(f"Successfully changed password for {account}")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -59,18 +61,18 @@ def owner(conn, target: str, new_owner: str):
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(new_owner), attributes=['objectSid'])
     try:
         new_owner_SID = format_sid(conn._ldap_connection.entries[0]['objectSid'].raw_values[0])
-        logging.debug("Found new owner SID: %s" % new_owner_SID)
+        logging.debug(f"Found new owner SID: {new_owner_SID}")
     except IndexError:
-        logging.error('New owner SID not found in LDAP (%s)' % target)
+        logging.error(f'New owner SID not found in LDAP ({target})')
         return
 
     current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
     logging.info("Current owner information below")
-    logging.info("- SID: %s" % current_owner_SID)
-    logging.info("- sAMAccountName: %s" % conn.get_samaccountname_from_sid(current_owner_SID))
+    logging.info(f"- SID: {current_owner_SID}")
+    logging.info(f"- sAMAccountName: {conn.get_samaccountname_from_sid(current_owner_SID)}")
     conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
     current_owner_distinguished_name = conn._ldap_connection.entries[0]
-    logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
+    logging.info(f"- distinguishedName: {current_owner_distinguished_name['distinguishedName']}")
 
     logging.debug('Attempt to modify the OwnerSid')
     _new_owner_SID = ldaptypes.LDAP_SID()
@@ -102,13 +104,13 @@ def computer_name(conn, current_name, new_name):
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(current_name), attributes=['objectSid', 'sAMAccountName'])
     computer_dn = conn._ldap_connection.entries[0].entry_dn
     if not computer_dn:
-        return "Computer not found in LDAP: %s" % current_name
+        return f"Computer not found in LDAP: {current_name}"
 
     entry = conn._ldap_connection.entries[0]
-    samAccountName = entry["samAccountName"].value
-    logging.info("Original sAMAccountName: %s" % samAccountName)
+    sam_account_name = entry["samAccountName"].value
+    logging.info(f"Original sAMAccountName: {sam_account_name}")
 
-    logging.info("New sAMAccountName: %s" % new_name)
+    logging.info(f"New sAMAccountName: {new_name}")
 
     try:
         conn.modify(computer_dn, {'sAMAccountName':(ldap3.MODIFY_REPLACE, [new_name])})
@@ -127,28 +129,28 @@ def dontreqpreauth(conn, account, flag):
         account: sAMAccountName of the account
         flag: "True" to set flag, "False" to unset
     """
-    UF_DONT_REQUIRE_PREAUTH = 4194304
+    dont_req_preauth = ACCOUNT_FLAGS["DONT_REQ_PREAUTH"]
 
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(account), attributes=['objectSid', 'userAccountControl'])
     user_dn = conn._ldap_connection.entries[0].entry_dn
     if not user_dn:
-        return "User not found in LDAP: %s" % account
+        return f"User not found in LDAP: {account}"
 
     entry = conn._ldap_connection.entries[0]
-    userAccountControl = entry["userAccountControl"].value
-    logging.info("Original userAccountControl: %d" % userAccountControl) 
+    uac = entry["userAccountControl"].value
+    logging.info(f"Original userAccountControl: {uac}")
 
-    set_flag = True if flag == "True" else False
+    set_flag = flag == "True"
 
     if set_flag:
-        userAccountControl = userAccountControl | UF_DONT_REQUIRE_PREAUTH
+        uac = uac | dont_req_preauth
     else:
-        userAccountControl = userAccountControl & ~UF_DONT_REQUIRE_PREAUTH
+        uac = uac & ~dont_req_preauth
 
-    logging.info("Updated userAccountControl: %d" % userAccountControl) 
+    logging.info(f"Updated userAccountControl: {uac}") 
 
     try:
-        conn.modify(user_dn, {'userAccountControl':(ldap3.MODIFY_REPLACE, [userAccountControl])})
+        conn.modify(user_dn, {'userAccountControl': (ldap3.MODIFY_REPLACE, [uac])})
         logging.info("Updated userAccountControl attribute successfully")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
@@ -172,7 +174,7 @@ def _toggle_account_enable_disable(conn, user_name, enable):
         user_name: sAMAccountName of the user
         enable: True to enable, False to disable
     """
-    UF_ACCOUNT_DISABLE = 2
+    account_disable = ACCOUNT_FLAGS["ACCOUNTDISABLE"]
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(user_name), attributes=['objectSid', 'userAccountControl'])
 
     if len(conn._ldap_connection.entries) != 1:
@@ -181,21 +183,21 @@ def _toggle_account_enable_disable(conn, user_name, enable):
 
     user_dn = conn._ldap_connection.entries[0].entry_dn
     if not user_dn:
-        logging.error("User not found in LDAP: %s" % user_name)
+        logging.error(f"User not found in LDAP: {user_name}")
         return
 
     entry = conn._ldap_connection.entries[0]
-    userAccountControl = int(entry["userAccountControl"].value)
+    uac = int(entry["userAccountControl"].value)
 
-    logging.info("Original userAccountControl: %d" % userAccountControl)
+    logging.info(f"Original userAccountControl: {uac}")
 
     if enable:
-        userAccountControl = userAccountControl & ~UF_ACCOUNT_DISABLE
+        uac = uac & ~account_disable
     else:
-        userAccountControl = userAccountControl | UF_ACCOUNT_DISABLE
+        uac = uac | account_disable
 
     try:
-        conn.modify(user_dn, {'userAccountControl':(ldap3.MODIFY_REPLACE, [userAccountControl])})
+        conn.modify(user_dn, {'userAccountControl': (ldap3.MODIFY_REPLACE, [uac])})
         logging.info("Updated userAccountControl attribute successfully")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
@@ -382,7 +384,7 @@ def restore_deleted(conn, target: str, new_name: str = None, new_parent: str = N
             )
 
             if conn._ldap_connection.result['result'] == 0:
-                logging.info(f"\x1b[92mSuccessfully restored {sam_account_name or target} to {new_dn}\x1b[0m")
+                logging.info(f"{BRIGHT_GREEN}Successfully restored {sam_account_name or target} to {new_dn}{RESET}")
             else:
                 error_msg = conn._ldap_connection.result.get('message', 'Unknown error')
                 desc = conn._ldap_connection.result.get('description', '')

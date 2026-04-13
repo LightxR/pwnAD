@@ -2,12 +2,14 @@ import logging
 import sys
 
 RESET = '\033[0m'
+BOLD = '\033[1m'
 RED = '\033[31m'
 GREEN = '\033[32m'
 ORANGE = '\033[33m'
 BLUE = '\033[34m'
 PURPLE = '\033[35m'
 LIGHT_RED = '\033[91m'
+BRIGHT_GREEN = '\033[92m'
 
 
 class ADSFormatter(logging.Formatter):

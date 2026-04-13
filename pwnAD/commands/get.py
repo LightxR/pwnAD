@@ -9,6 +9,7 @@ import ldap3
 import logging
 
 from pwnAD.lib.accesscontrol import *
+from pwnAD.lib.logger import BLUE, BOLD, LIGHT_RED, RESET
 from pwnAD.lib.utils import format_list_results, check_error, resolve_target
 from pwnAD.lib.gmsa import MSDS_MANAGEDPASSWORD_BLOB
 from pwnAD.lib.adcs import (
@@ -224,13 +225,13 @@ def RBCD(conn):
             sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetuser['raw_attributes']['msDS-AllowedToActOnBehalfOfOtherIdentity'][0])
             if len(sd['Dacl'].aces) > 0:
                 sam = targetuser['attributes']['sAMAccountName']
-                logging.info(f"Accounts allowed to act on behalf of other identity to \x1b[34m{sam}\x1b[0m:")
+                logging.info(f"Accounts allowed to act on behalf of other identity to {BLUE}{sam}{RESET}:")
                 for ace in sd['Dacl'].aces:
-                    SID = ace['Ace']['Sid'].formatCanonical()
-                    SidInfos = conn.get_sid_info(ace['Ace']['Sid'].formatCanonical())
-                    if SidInfos:
-                        SamAccountName = SidInfos[1]
-                        logging.info('    \x1b[34m%-10s\x1b[0m   (%s)' % (SamAccountName, SID))
+                    sid = ace['Ace']['Sid'].formatCanonical()
+                    sid_infos = conn.get_sid_info(sid)
+                    if sid_infos:
+                        sam_account_name = sid_infos[1]
+                        logging.info(f'    {BLUE}{sam_account_name:<10}{RESET}   ({sid})')
             else:
                 logging.info(f"Attribute msDS-AllowedToActOnBehalfOfOtherIdentity is empty on {targetuser['attributes']['sAMAccountName']}")
         except IndexError:
@@ -260,11 +261,11 @@ def owner(conn, target: str):
 
     current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
     logging.info("Current owner information below")
-    logging.info("- SID: %s" % current_owner_SID)
-    logging.info("- sAMAccountName: %s" % conn.get_samaccountname_from_sid(current_owner_SID))
+    logging.info(f"- SID: {current_owner_SID}")
+    logging.info(f"- sAMAccountName: {conn.get_samaccountname_from_sid(current_owner_SID)}")
     conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
     current_owner_distinguished_name = conn._ldap_connection.entries[0]
-    logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
+    logging.info(f"- distinguishedName: {current_owner_distinguished_name['distinguishedName']}")
 
 def machine_quota(conn):
     """Get the machine account quota (number of computers a user can join to domain)."""
@@ -348,11 +349,11 @@ def gmsa(conn):
 
                 # Compute aes keys
                 password = currentPassword.decode('utf-16-le', 'replace').encode('utf-8')
-                salt = '%shost%s.%s' % (args.domain.upper(), sam[:-1].lower(), args.domain.lower())
+                salt = f'{args.domain.upper()}host{sam[:-1].lower()}.{args.domain.lower()}'
                 aes_128_hash = hexlify(string_to_key(constants.EncryptionTypes.aes128_cts_hmac_sha1_96.value, password, salt).contents)
                 aes_256_hash = hexlify(string_to_key(constants.EncryptionTypes.aes256_cts_hmac_sha1_96.value, password, salt).contents)
-                logging.info('%s:aes256-cts-hmac-sha1-96:%s' % (sam, aes_256_hash.decode('utf-8')))
-                logging.info('%s:aes128-cts-hmac-sha1-96:%s' % (sam, aes_128_hash.decode('utf-8')))
+                logging.info(f'{sam}:aes256-cts-hmac-sha1-96:{aes_256_hash.decode("utf-8")}')
+                logging.info(f'{sam}:aes128-cts-hmac-sha1-96:{aes_128_hash.decode("utf-8")}')
 
     except Exception as e:
         logging.error(f"An error occured while trying to retreive GMSA passwords : {e}")
@@ -397,7 +398,7 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
     """
     # Build LDAP filter based on object type
     if otype == "useronly":
-        ldap_filter = "(sAMAccountType=805306368)"
+        ldap_filter = f"(sAMAccountType={SAM_NORMAL_USER_ACCOUNT})"
     elif otype == "ou":
         ldap_filter = "(|(objectClass=container)(objectClass=organizationalUnit))"
     elif otype == "gpo":
@@ -861,7 +862,7 @@ def deleted(conn, target: str = None, otype: str = "*"):
             object_sid = attrs.get('objectSid', [''])[0] if attrs.get('objectSid') else ''
             when_changed = attrs.get('whenChanged', [''])[0] if attrs.get('whenChanged') else ''
 
-            print(f"\x1b[91m[DELETED]\x1b[0m \x1b[1m{last_known_rdn or name}\x1b[0m ({obj_type})")
+            print(f"{LIGHT_RED}[DELETED]{RESET} {BOLD}{last_known_rdn or name}{RESET} ({obj_type})")
             if sam:
                 print(f"  sAMAccountName: {sam}")
             if object_sid:
@@ -1162,9 +1163,9 @@ def adcs(conn, vulnerable_only: bool = False, output: str = None, format: str = 
         if write_to_stdout:
             colored = text_content
             # Add colors for headers and vulnerability indicators
-            colored = colored.replace("Certificate Authorities\n", "\x1b[1mCertificate Authorities\x1b[0m\n")
-            colored = colored.replace("Certificate Templates\n", "\x1b[1mCertificate Templates\x1b[0m\n")
-            colored = colored.replace("[!] Vulnerabilities", "\x1b[91m[!] Vulnerabilities\x1b[0m")
+            colored = colored.replace("Certificate Authorities\n", f"{BOLD}Certificate Authorities{RESET}\n")
+            colored = colored.replace("Certificate Templates\n", f"{BOLD}Certificate Templates{RESET}\n")
+            colored = colored.replace("[!] Vulnerabilities", f"{LIGHT_RED}[!] Vulnerabilities{RESET}")
             print(colored)
 
         # Write to file (without colors)

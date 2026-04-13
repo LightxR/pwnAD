@@ -290,7 +290,7 @@ def get_identifications_from_certificate(
 
         for name in san.value.get_values_for_type(x509.DNSName):
             identifications.append(("DNS Host Name", name))
-    except:
+    except Exception:
         pass
 
     return identifications
@@ -304,7 +304,7 @@ def get_object_sid_from_certificate(
 
         sid = object_sid.value.value
         return sid[sid.find(b"S-1-5") :].decode()
-    except:
+    except Exception:
         pass
 
     return None

@@ -2,6 +2,7 @@ import argparse
 import sys
 import re
 from impacket.krb5 import constants
+from pwnAD.lib.logger import LIGHT_RED, RESET
 
 
 class PwnADHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -30,7 +31,7 @@ class PwnADArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         """Override error to show help instead of ugly error message."""
-        sys.stderr.write(f'\n\033[91m[-] Error: {self._clean_error_message(message)}\033[0m\n\n')
+        sys.stderr.write(f'\n{LIGHT_RED}[-] Error: {self._clean_error_message(message)}{RESET}\n\n')
         self.print_help(sys.stderr)
         sys.exit(2)
 
