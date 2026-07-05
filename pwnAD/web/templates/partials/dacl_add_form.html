@@ -1,0 +1,41 @@
+<div id="dacl-add-form" class="hidden rounded-lg border border-neutral-700 bg-neutral-950/50 p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-white">Add ACE</h3>
+        <button onclick="document.getElementById('dacl-add-form').classList.add('hidden')" class="text-neutral-500 hover:text-white">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <form onsubmit="return submitDaclWrite(this)">
+        <input type="hidden" name="dn" value="{{ target_dn }}">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Principal (sAMAccountName or SID)</label>
+                <input type="text" name="principal" required
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    placeholder="jdoe">
+            </div>
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Right</label>
+                <select name="right" required
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    {% for right_name, right_cfg in dacl_rights.items() %}
+                    <option value="{{ right_name }}">{{ right_name }} - {{ right_cfg.description }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-neutral-400 mb-1">Type</label>
+                <select name="ace_type"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <option value="allowed">Allowed</option>
+                    <option value="denied">Denied</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="w-full rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+                    <i class="fas fa-plus mr-1"></i> Add ACE
+                </button>
+            </div>
+        </div>
+    </form>
+</div>

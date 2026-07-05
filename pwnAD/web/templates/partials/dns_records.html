@@ -1,0 +1,23 @@
+{% for rec in records %}
+<tr class="hover:bg-white/[0.02] transition border-t border-neutral-800/50">
+    <td class="px-4 py-2.5 text-sm text-white font-medium">{{ rec.name }}</td>
+    <td class="px-4 py-2.5">
+        <span class="inline-block text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">{{ rec.type }}</span>
+    </td>
+    <td class="px-4 py-2.5 text-sm text-neutral-300 font-mono">{{ rec.data }}</td>
+    <td class="px-4 py-2.5 text-xs text-neutral-500">{{ rec.ttl }}s</td>
+    <td class="px-4 py-2.5">
+        <button onclick="removeDnsRecord('{{ zone }}', '{{ rec.name }}', '{{ rec.data }}', '{{ rec.type }}')"
+            class="text-red-400 hover:text-red-300 text-xs" title="Remove record">
+            <i class="fas fa-trash"></i>
+        </button>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
+        <i class="fas fa-globe text-2xl mb-2 block"></i>
+        No DNS records found
+    </td>
+</tr>
+{% endfor %}

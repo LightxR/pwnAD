@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Writable Objects{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-4">
+            <i class="fas fa-pen text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">Writable Objects</h2>
+        </div>
+        <form method="GET" action="/writable" class="flex flex-col md:flex-row gap-3 items-end">
+            <div>
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Object Type</label>
+                <select name="otype" class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <option value="*" {% if otype == '*' %}selected{% endif %}>All</option>
+                    <option value="useronly" {% if otype == 'useronly' %}selected{% endif %}>Users only</option>
+                    <option value="ou" {% if otype == 'ou' %}selected{% endif %}>OUs/Containers</option>
+                    <option value="gpo" {% if otype == 'gpo' %}selected{% endif %}>GPOs</option>
+                    <option value="computer" {% if otype == 'computer' %}selected{% endif %}>Computers</option>
+                    <option value="group" {% if otype == 'group' %}selected{% endif %}>Groups</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Right</label>
+                <select name="right" class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <option value="ALL" {% if right == 'ALL' %}selected{% endif %}>All Rights</option>
+                    <option value="WRITE" {% if right == 'WRITE' %}selected{% endif %}>Write Only</option>
+                    <option value="CHILD" {% if right == 'CHILD' %}selected{% endif %}>Child Only</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Partition</label>
+                <select name="partition" class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <option value="DOMAIN" {% if partition == 'DOMAIN' %}selected{% endif %}>Domain</option>
+                    <option value="CONFIGURATION" {% if partition == 'CONFIGURATION' %}selected{% endif %}>Configuration</option>
+                    <option value="SCHEMA" {% if partition == 'SCHEMA' %}selected{% endif %}>Schema</option>
+                    <option value="DNS" {% if partition == 'DNS' %}selected{% endif %}>DNS Zones</option>
+                    <option value="ALL" {% if partition == 'ALL' %}selected{% endif %}>All</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit"
+                    class="whitespace-nowrap rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if error is defined and error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    {% if results is not none %}
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">
+                Writable objects: <span id="writable-count" class="text-white font-medium">{{ results|length }}</span>
+            </span>
+            <input type="text" placeholder="Filter..."
+                class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="filterRows(this.value)">
+        </div>
+        <div class="flex-1 overflow-auto scrollbar">
+            {% include "partials/writable_results.html" %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterRows(q) {
+    document.querySelectorAll('#writable-body tr').forEach(function(r) {
+        r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    });
+    updateCount();
+}
+
+function updateCount() {
+    var rows = document.querySelectorAll('#writable-body tr:not([style*="display: none"])');
+    // Exclude the "no results" row
+    var count = 0;
+    rows.forEach(function(r) {
+        if (!r.querySelector('td[colspan]')) count++;
+    });
+    var countEl = document.getElementById('writable-count');
+    if (countEl) countEl.textContent = count;
+
+    // Show/hide "no results" message
+    var noResultsRow = document.getElementById('no-results-row');
+    if (!noResultsRow) {
+        noResultsRow = document.createElement('tr');
+        noResultsRow.id = 'no-results-row';
+        noResultsRow.innerHTML = '<td colspan="5" class="px-4 py-8 text-center text-neutral-500">No writable objects found</td>';
+        document.getElementById('writable-body').appendChild(noResultsRow);
+    }
+    noResultsRow.style.display = count === 0 ? '' : 'none';
+}
+
+// Update count on page load to reflect template-filtered results
+document.addEventListener('DOMContentLoaded', updateCount);
+</script>
+{% endblock %}

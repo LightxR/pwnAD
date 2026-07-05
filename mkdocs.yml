@@ -51,6 +51,7 @@ nav:
   - Installation: installation.md
   - Authentication: authentication.md
   - Interactive Mode: interactive-mode.md
+  - Web Interface: web-interface.md
   - Commands:
       - Overview: commands/index.md
       - add: commands/add.md

@@ -9,8 +9,14 @@ import ldap3
 import logging
 
 from pwnAD.lib.accesscontrol import *
+from pwnAD.lib.logger import BLUE, BOLD, LIGHT_RED, RESET
 from pwnAD.lib.utils import format_list_results, check_error, resolve_target
 from pwnAD.lib.gmsa import MSDS_MANAGEDPASSWORD_BLOB
+from pwnAD.lib.adcs import (
+    get_certificate_templates, get_enrollment_services, analyze_adcs,
+    get_oid_to_group_links, ESC_DEFINITIONS, CertificateAuthority
+)
+from pwnAD.lib.permissions import writable_by_target
 from pwnAD.commands.query import query
 
 
@@ -104,7 +110,7 @@ def passwords_dont_expire(conn):
 
 def users_with_admin_count(conn):
     """List users with adminCount=1 (historically privileged accounts)."""
-    query(conn, "(&(objectClass=user)(admincount=1)(!(samaccountname=krbtgt))(!(samaccountname=administrator)))", "samaccountname", simple=True)
+    query(conn, "(&(objectClass=user)(admincount=1)(!(samaccountname=krbtgt)))", "samaccountname", simple=True)
 
 def accounts_with_sid_histoy(conn):
     """List accounts with SID History attribute set."""
@@ -219,13 +225,13 @@ def RBCD(conn):
             sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=targetuser['raw_attributes']['msDS-AllowedToActOnBehalfOfOtherIdentity'][0])
             if len(sd['Dacl'].aces) > 0:
                 sam = targetuser['attributes']['sAMAccountName']
-                logging.info(f"Accounts allowed to act on behalf of other identity to \x1b[34m{sam}\x1b[0m:")
+                logging.info(f"Accounts allowed to act on behalf of other identity to {BLUE}{sam}{RESET}:")
                 for ace in sd['Dacl'].aces:
-                    SID = ace['Ace']['Sid'].formatCanonical()
-                    SidInfos = conn.get_sid_info(ace['Ace']['Sid'].formatCanonical())
-                    if SidInfos:
-                        SamAccountName = SidInfos[1]
-                        logging.info('    \x1b[34m%-10s\x1b[0m   (%s)' % (SamAccountName, SID))
+                    sid = ace['Ace']['Sid'].formatCanonical()
+                    sid_infos = conn.get_sid_info(sid)
+                    if sid_infos:
+                        sam_account_name = sid_infos[1]
+                        logging.info(f'    {BLUE}{sam_account_name:<10}{RESET}   ({sid})')
             else:
                 logging.info(f"Attribute msDS-AllowedToActOnBehalfOfOtherIdentity is empty on {targetuser['attributes']['sAMAccountName']}")
         except IndexError:
@@ -255,11 +261,11 @@ def owner(conn, target: str):
 
     current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
     logging.info("Current owner information below")
-    logging.info("- SID: %s" % current_owner_SID)
-    logging.info("- sAMAccountName: %s" % conn.get_samaccountname_from_sid(current_owner_SID))
+    logging.info(f"- SID: {current_owner_SID}")
+    logging.info(f"- sAMAccountName: {conn.get_samaccountname_from_sid(current_owner_SID)}")
     conn._ldap_connection.search(conn._baseDN, '(objectSid=%s)' % current_owner_SID, attributes=['distinguishedName'])
     current_owner_distinguished_name = conn._ldap_connection.entries[0]
-    logging.info("- distinguishedName: %s" % current_owner_distinguished_name['distinguishedName'])
+    logging.info(f"- distinguishedName: {current_owner_distinguished_name['distinguishedName']}")
 
 def machine_quota(conn):
     """Get the machine account quota (number of computers a user can join to domain)."""
@@ -343,11 +349,11 @@ def gmsa(conn):
 
                 # Compute aes keys
                 password = currentPassword.decode('utf-16-le', 'replace').encode('utf-8')
-                salt = '%shost%s.%s' % (args.domain.upper(), sam[:-1].lower(), args.domain.lower())
+                salt = f'{args.domain.upper()}host{sam[:-1].lower()}.{args.domain.lower()}'
                 aes_128_hash = hexlify(string_to_key(constants.EncryptionTypes.aes128_cts_hmac_sha1_96.value, password, salt).contents)
                 aes_256_hash = hexlify(string_to_key(constants.EncryptionTypes.aes256_cts_hmac_sha1_96.value, password, salt).contents)
-                logging.info('%s:aes256-cts-hmac-sha1-96:%s' % (sam, aes_256_hash.decode('utf-8')))
-                logging.info('%s:aes128-cts-hmac-sha1-96:%s' % (sam, aes_128_hash.decode('utf-8')))
+                logging.info(f'{sam}:aes256-cts-hmac-sha1-96:{aes_256_hash.decode("utf-8")}')
+                logging.info(f'{sam}:aes128-cts-hmac-sha1-96:{aes_128_hash.decode("utf-8")}')
 
     except Exception as e:
         logging.error(f"An error occured while trying to retreive GMSA passwords : {e}")
@@ -358,9 +364,9 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
     Based on bloodyAD code.
     Retrieve objects writable by the current authenticated user.
 
-    This function identifies directory objects that the authenticated user can modify based on effective permissions.
-    It uses Active Directory's computed attributes (allowedAttributesEffective, allowedChildClassesEffective,
-    sDRightsEffective) to determine actual write permissions.
+    This function identifies directory objects that the current user can modify,
+    using AD's computed attributes (allowedAttributesEffective, sDRightsEffective,
+    allowedChildClassesEffective).
 
     Args:
         conn: LDAP connection object
@@ -379,7 +385,8 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
                    - "DOMAIN": Domain naming context (default)
                    - "CONFIGURATION": Configuration naming context
                    - "SCHEMA": Schema naming context
-                   - "ALL": All naming contexts
+                   - "DNS": DNS application partitions (DomainDnsZones, ForestDnsZones)
+                   - "ALL": All naming contexts including DNS zones
         exclude_deleted: If True, exclude deleted objects from results
 
     Returns:
@@ -391,7 +398,7 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
     """
     # Build LDAP filter based on object type
     if otype == "useronly":
-        ldap_filter = "(sAMAccountType=805306368)"
+        ldap_filter = f"(sAMAccountType={SAM_NORMAL_USER_ACCOUNT})"
     elif otype == "ou":
         ldap_filter = "(|(objectClass=container)(objectClass=organizationalUnit))"
     elif otype == "gpo":
@@ -416,11 +423,19 @@ def writable(conn, otype="*", right="ALL", detail=False, partition="DOMAIN", exc
         search_bases.append(conn.configuration_path)
     elif partition == "SCHEMA":
         search_bases.append(f"CN=Schema,{conn.configuration_path}")
+    elif partition == "DNS":
+        # DNS application partitions
+        search_bases.extend([
+            f"DC=DomainDnsZones,{conn._baseDN}",
+            f"DC=ForestDnsZones,{conn._baseDN}"
+        ])
     elif partition == "ALL":
         search_bases.extend([
             conn._baseDN,
             conn.configuration_path,
-            f"CN=Schema,{conn.configuration_path}"
+            f"CN=Schema,{conn.configuration_path}",
+            f"DC=DomainDnsZones,{conn._baseDN}",
+            f"DC=ForestDnsZones,{conn._baseDN}"
         ])
 
     # Set up LDAP controls
@@ -748,4 +763,420 @@ def attribute(conn, target: str, attr: str, raw: bool = False):
         logging.error(f"LDAP error: {e}")
     except Exception as e:
         logging.error(f"Error retrieving attribute: {e}")
+
+
+def deleted(conn, target: str = None, otype: str = "*"):
+    """
+    List deleted objects from the AD Recycle Bin.
+
+    This function enumerates objects in the CN=Deleted Objects container
+    using the LDAP_SERVER_SHOW_DELETED_OID control (1.2.840.113556.1.4.417).
+
+    Args:
+        conn: LDAP connection object
+        target: Optional target to search for (sAMAccountName, SID, or name pattern)
+        otype: Object type filter (user, computer, group, or * for all)
+
+    Note:
+        Requires the AD Recycle Bin feature to be enabled (Windows Server 2008 R2+).
+        Deleted objects retain their attributes for the tombstoneLifetime period (default 180 days).
+    """
+    # LDAP control to show deleted objects
+    LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417"
+    show_deleted_control = (LDAP_SERVER_SHOW_DELETED_OID, True, None)
+
+    # Build search filter
+    if otype == "user":
+        type_filter = "(objectClass=user)"
+    elif otype == "computer":
+        type_filter = "(objectClass=computer)"
+    elif otype == "group":
+        type_filter = "(objectClass=group)"
+    else:
+        type_filter = "(objectClass=*)"
+
+    # Base filter for deleted objects
+    if target:
+        # Search by sAMAccountName, SID, or name pattern
+        escaped_target = escape_filter_chars(target)
+        if target.startswith("S-1-"):
+            ldap_filter = f"(&(isDeleted=TRUE){type_filter}(objectSid={escaped_target}))"
+        else:
+            ldap_filter = f"(&(isDeleted=TRUE){type_filter}(|(sAMAccountName=*{escaped_target}*)(cn=*{escaped_target}*)(name=*{escaped_target}*)))"
+    else:
+        ldap_filter = f"(&(isDeleted=TRUE){type_filter})"
+
+    # Search in Deleted Objects container
+    deleted_objects_dn = f"CN=Deleted Objects,{conn._baseDN}"
+
+    attributes = [
+        'distinguishedName',
+        'sAMAccountName',
+        'objectSid',
+        'objectClass',
+        'name',
+        'msDS-LastKnownRDN',
+        'lastKnownParent',
+        'whenChanged',
+        'whenCreated',
+        'isDeleted'
+    ]
+
+    try:
+        conn._ldap_connection.search(
+            search_base=deleted_objects_dn,
+            search_filter=ldap_filter,
+            search_scope=ldap3.SUBTREE,
+            attributes=attributes,
+            controls=[show_deleted_control]
+        )
+
+        entries = conn._ldap_connection.entries
+
+        if not entries:
+            logging.info("No deleted objects found")
+            return
+
+        logging.info(f"Found {len(entries)} deleted object(s)")
+        print()
+
+        for entry in entries:
+            dn = entry.entry_dn
+            attrs = entry.entry_attributes_as_dict
+
+            # Get object class for display
+            obj_classes = attrs.get('objectClass', [])
+            if 'computer' in obj_classes:
+                obj_type = 'Computer'
+            elif 'group' in obj_classes:
+                obj_type = 'Group'
+            elif 'user' in obj_classes:
+                obj_type = 'User'
+            else:
+                obj_type = 'Object'
+
+            sam = attrs.get('sAMAccountName', [''])[0] if attrs.get('sAMAccountName') else ''
+            name = attrs.get('name', [''])[0] if attrs.get('name') else ''
+            last_known_rdn = attrs.get('msDS-LastKnownRDN', [''])[0] if attrs.get('msDS-LastKnownRDN') else ''
+            last_known_parent = attrs.get('lastKnownParent', [''])[0] if attrs.get('lastKnownParent') else ''
+            object_sid = attrs.get('objectSid', [''])[0] if attrs.get('objectSid') else ''
+            when_changed = attrs.get('whenChanged', [''])[0] if attrs.get('whenChanged') else ''
+
+            print(f"{LIGHT_RED}[DELETED]{RESET} {BOLD}{last_known_rdn or name}{RESET} ({obj_type})")
+            if sam:
+                print(f"  sAMAccountName: {sam}")
+            if object_sid:
+                print(f"  objectSid: {object_sid}")
+            if last_known_parent:
+                print(f"  lastKnownParent: {last_known_parent}")
+            if when_changed:
+                print(f"  whenChanged: {when_changed}")
+            print(f"  distinguishedName: {dn}")
+            print()
+
+    except ldap3.core.exceptions.LDAPException as e:
+        if "noSuchObject" in str(e):
+            logging.error("Deleted Objects container not found. AD Recycle Bin may not be enabled.")
+        else:
+            logging.error(f"LDAP error: {e}")
+    except Exception as e:
+        logging.error(f"Error listing deleted objects: {e}")
+
+
+def adcs(conn, vulnerable_only: bool = False, output: str = None, format: str = "text", stdout: bool = False, ca_config: bool = False):
+    """
+    Perform full ADCS enumeration and vulnerability analysis.
+
+    Similar to 'certipy find' - enumerates CAs, templates, and detects ESC1-ESC15.
+
+    Args:
+        conn: LDAP connection object
+        vulnerable_only: If True, only show vulnerable templates
+        output: Output file path (base name for CSV)
+        format: Output format - 'text', 'json', or 'csv'
+        stdout: Force output to stdout even with --output
+        ca_config: If True, try to get CA config via RRP (Web Enrollment, User Specified SAN, etc.)
+    """
+    import json
+    import csv
+    import io
+    from datetime import datetime
+
+    logging.info("Performing ADCS enumeration...")
+
+    try:
+        # Full analysis
+        result = analyze_adcs(conn, vulnerable_only=vulnerable_only, get_ca_config=ca_config)
+
+        cas = result['cas']
+        all_templates = result['templates']
+        summary = result['summary']
+
+        # Determine output destination
+        write_to_file = output and not stdout
+        write_to_stdout = not output or stdout
+
+        # JSON output
+        if format == "json":
+            output_data = {
+                'domain': conn.domain,
+                'timestamp': datetime.now().isoformat(),
+                'cas': [ca.to_dict() for ca in cas],
+                'templates': [t.to_dict() for t in all_templates],
+                'summary': summary,
+            }
+            json_str = json.dumps(output_data, indent=2, default=str)
+
+            if write_to_stdout:
+                print(json_str)
+
+            if write_to_file:
+                output_file = output if output.endswith('.json') else f"{output}.json"
+                with open(output_file, 'w') as f:
+                    f.write(json_str)
+                logging.info(f"JSON results written to {output_file}")
+            return
+
+        # CSV output
+        if format == "csv":
+            # Generate CSV for CAs
+            ca_csv = io.StringIO()
+            ca_writer = csv.writer(ca_csv)
+            ca_writer.writerow([
+                'Name', 'DNS Hostname', 'CA Certificate DN', 'Serial Number',
+                'Validity Start', 'Validity End', 'Web Enrollment', 'User Specified SAN',
+                'Request Disposition', 'Enforce Encryption', 'Owner', 'Templates Count', 'Templates'
+            ])
+            for ca in cas:
+                ca_writer.writerow([
+                    ca.name,
+                    ca.dns_hostname,
+                    ca.ca_certificate_dn or '',
+                    ca.certificate_serial_number or '',
+                    str(ca.certificate_validity_start) if ca.certificate_validity_start else '',
+                    str(ca.certificate_validity_end) if ca.certificate_validity_end else '',
+                    'Enabled' if ca.web_enrollment else ('Disabled' if ca.web_enrollment is False else ''),
+                    'Enabled' if ca.user_specified_san else ('Disabled' if ca.user_specified_san is False else ''),
+                    ca.request_disposition or '',
+                    'Enabled' if ca.enforce_encryption else ('Disabled' if ca.enforce_encryption is False else ''),
+                    ca.owner or '',
+                    len(ca.certificate_templates),
+                    ';'.join(ca.certificate_templates)
+                ])
+
+            # Generate CSV for Templates
+            tpl_csv = io.StringIO()
+            tpl_writer = csv.writer(tpl_csv)
+            tpl_writer.writerow([
+                'Name', 'Display Name', 'Schema Version', 'Can Enroll', 'Can Write',
+                'Enrollee Supplies Subject', 'Client Authentication', 'Any Purpose',
+                'Enrollment Agent', 'Manager Approval Required', 'No Security Extension',
+                'Authorized Signatures Required', 'EKUs', 'Enabled On CAs',
+                'Vulnerabilities', 'Highest Severity'
+            ])
+            for t in all_templates:
+                tpl_writer.writerow([
+                    t.name,
+                    t.display_name,
+                    t.schema_version,
+                    t.can_enroll,
+                    t.can_write,
+                    t.enrollee_supplies_subject,
+                    t.client_authentication,
+                    t.any_purpose,
+                    t.enrollment_agent,
+                    t.requires_manager_approval,
+                    t.no_security_extension,
+                    t.authorized_signatures_required,
+                    ';'.join(t.get_eku_names()),
+                    ';'.join(t.enabled_on_cas),
+                    ';'.join(v['id'] for v in t.vulnerabilities),
+                    t.highest_severity or ''
+                ])
+
+            if write_to_stdout:
+                print("=== Certificate Authorities ===")
+                print(ca_csv.getvalue())
+                print("\n=== Certificate Templates ===")
+                print(tpl_csv.getvalue())
+
+            if write_to_file:
+                base_name = output.rsplit('.', 1)[0] if '.' in output else output
+                ca_file = f"{base_name}_CAs.csv"
+                tpl_file = f"{base_name}_Templates.csv"
+
+                with open(ca_file, 'w', newline='') as f:
+                    f.write(ca_csv.getvalue())
+                with open(tpl_file, 'w', newline='') as f:
+                    f.write(tpl_csv.getvalue())
+
+                logging.info(f"CSV results written to {ca_file} and {tpl_file}")
+            return
+
+        # Text output (default) - Certipy-style
+        text_output = io.StringIO()
+        INDENT = "    "
+
+        def out(line=""):
+            text_output.write(line + "\n")
+
+        out("Certificate Authorities")
+        if cas:
+            for idx, ca in enumerate(cas):
+                out(f"  {idx}")
+                out(f"{INDENT}CA Name                             : {ca.name}")
+                out(f"{INDENT}DNS Name                            : {ca.dns_hostname}")
+                if ca.ca_certificate_dn:
+                    out(f"{INDENT}Certificate Subject                 : {ca.ca_certificate_dn}")
+                if ca.certificate_serial_number:
+                    out(f"{INDENT}Certificate Serial Number           : {ca.certificate_serial_number}")
+                if ca.certificate_validity_start:
+                    out(f"{INDENT}Certificate Validity Start          : {ca.certificate_validity_start}")
+                if ca.certificate_validity_end:
+                    out(f"{INDENT}Certificate Validity End            : {ca.certificate_validity_end}")
+                # CA Configuration (from registry)
+                web_enroll = 'Enabled' if ca.web_enrollment else 'Disabled' if ca.web_enrollment is False else 'N/A'
+                user_san = 'Enabled' if ca.user_specified_san else 'Disabled' if ca.user_specified_san is False else 'N/A'
+                req_disp = ca.request_disposition if ca.request_disposition else 'N/A'
+                enforce_enc = 'Enabled' if ca.enforce_encryption else 'Disabled' if ca.enforce_encryption is False else 'N/A'
+                out(f"{INDENT}Web Enrollment                      : {web_enroll}")
+                out(f"{INDENT}User Specified SAN                  : {user_san}")
+                out(f"{INDENT}Request Disposition                 : {req_disp}")
+                out(f"{INDENT}Enforce Encryption for Requests     : {enforce_enc}")
+                # Permissions
+                out(f"{INDENT}Permissions")
+                if ca.owner:
+                    out(f"{INDENT}  Owner                             : {ca.owner}")
+                out(f"{INDENT}  Access Rights")
+                if ca.manage_certificates_principals:
+                    out(f"{INDENT}    ManageCertificates              : {ca.manage_certificates_principals[0]}")
+                    for p in ca.manage_certificates_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+                if ca.manage_ca_principals:
+                    out(f"{INDENT}    ManageCa                        : {ca.manage_ca_principals[0]}")
+                    for p in ca.manage_ca_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+                if ca.enroll_principals:
+                    out(f"{INDENT}    Enroll                          : {ca.enroll_principals[0]}")
+                    for p in ca.enroll_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+                out(f"{INDENT}Certificate Templates               : {len(ca.certificate_templates)}")
+        else:
+            out("  No CAs found")
+
+        out("Certificate Templates")
+        if not all_templates:
+            out("  No templates found" if not vulnerable_only else "  No vulnerable templates found")
+        else:
+            sorted_templates = sorted(
+                all_templates,
+                key=lambda t: (0 if t.is_vulnerable else 1, 0 if t.can_enroll else 1, t.name)
+            )
+
+            for idx, template in enumerate(sorted_templates):
+                out(f"  {idx}")
+                out(f"{INDENT}Template Name                       : {template.name}")
+                out(f"{INDENT}Display Name                        : {template.display_name}")
+                if template.enabled_on_cas:
+                    out(f"{INDENT}Certificate Authorities             : {', '.join(template.enabled_on_cas)}")
+                out(f"{INDENT}Enabled                             : {template.enabled}")
+                out(f"{INDENT}Client Authentication               : {template.client_authentication}")
+                out(f"{INDENT}Enrollment Agent                    : {template.enrollment_agent}")
+                out(f"{INDENT}Any Purpose                         : {template.any_purpose}")
+                out(f"{INDENT}Enrollee Supplies Subject           : {template.enrollee_supplies_subject}")
+
+                # Certificate Name Flags
+                name_flags = template.get_certificate_name_flags()
+                if name_flags:
+                    out(f"{INDENT}Certificate Name Flag               : {name_flags[0]}")
+                    for flag in name_flags[1:]:
+                        out(f"{INDENT}                                      {flag}")
+
+                # Enrollment Flags
+                enrollment_flags = template.get_enrollment_flags()
+                if enrollment_flags:
+                    out(f"{INDENT}Enrollment Flag                     : {enrollment_flags[0]}")
+                    for flag in enrollment_flags[1:]:
+                        out(f"{INDENT}                                      {flag}")
+
+                # Private Key Flags
+                pk_flags = template.get_private_key_flags()
+                if pk_flags:
+                    out(f"{INDENT}Private Key Flag                    : {pk_flags[0]}")
+                    for flag in pk_flags[1:]:
+                        out(f"{INDENT}                                      {flag}")
+
+                # Extended Key Usage
+                ekus = template.get_eku_names()
+                if ekus:
+                    out(f"{INDENT}Extended Key Usage                  : {ekus[0]}")
+                    for eku in ekus[1:]:
+                        out(f"{INDENT}                                      {eku}")
+                elif template.schema_version == 1:
+                    out(f"{INDENT}Extended Key Usage                  : <No EKUs> (Schema v1)")
+
+                out(f"{INDENT}Requires Manager Approval           : {template.requires_manager_approval}")
+                out(f"{INDENT}Requires Key Archival               : {template.requires_key_archival}")
+                out(f"{INDENT}Authorized Signatures Required      : {template.authorized_signatures_required}")
+                out(f"{INDENT}Validity Period                     : {template.validity_period}")
+                out(f"{INDENT}Renewal Period                      : {template.renewal_period}")
+                out(f"{INDENT}Minimum RSA Key Length              : {template.min_key_size}")
+
+                # Permissions
+                out(f"{INDENT}Permissions")
+
+                # Enrollment Permissions
+                out(f"{INDENT}  Enrollment Permissions")
+                enrollment_rights = [p['principal'] for p in template.enrollment_permissions]
+                if enrollment_rights:
+                    out(f"{INDENT}    Enrollment Rights               : {enrollment_rights[0]}")
+                    for right in enrollment_rights[1:]:
+                        out(f"{INDENT}                                      {right}")
+
+                # Object Control Permissions
+                out(f"{INDENT}  Object Control Permissions")
+                if template.owner:
+                    out(f"{INDENT}    Owner                           : {template.owner}")
+                if template.write_owner_principals:
+                    out(f"{INDENT}    Write Owner Principals          : {template.write_owner_principals[0]}")
+                    for p in template.write_owner_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+                if template.write_dacl_principals:
+                    out(f"{INDENT}    Write Dacl Principals           : {template.write_dacl_principals[0]}")
+                    for p in template.write_dacl_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+                if template.write_property_principals:
+                    out(f"{INDENT}    Write Property Principals       : {template.write_property_principals[0]}")
+                    for p in template.write_property_principals[1:]:
+                        out(f"{INDENT}                                      {p}")
+
+                # Vulnerabilities
+                if template.vulnerabilities:
+                    out(f"{INDENT}[!] Vulnerabilities")
+                    for vuln in template.vulnerabilities:
+                        detail = vuln.get('detail', vuln['description'])
+                        out(f"{INDENT}    {vuln['id']:<32}  : {detail}")
+
+        text_content = text_output.getvalue()
+
+        # Print to stdout with colors
+        if write_to_stdout:
+            colored = text_content
+            # Add colors for headers and vulnerability indicators
+            colored = colored.replace("Certificate Authorities\n", f"{BOLD}Certificate Authorities{RESET}\n")
+            colored = colored.replace("Certificate Templates\n", f"{BOLD}Certificate Templates{RESET}\n")
+            colored = colored.replace("[!] Vulnerabilities", f"{LIGHT_RED}[!] Vulnerabilities{RESET}")
+            print(colored)
+
+        # Write to file (without colors)
+        if write_to_file:
+            output_file = output if output.endswith('.txt') else f"{output}.txt"
+            with open(output_file, 'w') as f:
+                f.write(text_content)
+            logging.info(f"Text results written to {output_file}")
+
+    except Exception as e:
+        logging.error(f"Error during ADCS enumeration: {e}")
+        import traceback
+        traceback.print_exc()
 

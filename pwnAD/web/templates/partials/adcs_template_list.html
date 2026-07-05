@@ -1,0 +1,76 @@
+{% if templates %}
+{% for template in templates %}
+<tr class="border-b border-neutral-800/50 hover:bg-white/5 cursor-pointer transition"
+    onclick="showTemplateDetail('{{ template.name }}')"
+    hx-get="/adcs/template/{{ template.name }}"
+    hx-target="#template-detail-panel"
+    hx-swap="innerHTML">
+    <td class="px-4 py-3">
+        <div class="font-medium text-white">{{ template.name }}</div>
+        {% if template.display_name != template.name %}
+        <div class="text-xs text-neutral-500">{{ template.display_name }}</div>
+        {% endif %}
+    </td>
+    <td class="px-4 py-3 text-neutral-400">
+        v{{ template.schema_version }}
+    </td>
+    <td class="px-4 py-3">
+        {% if template.can_enroll %}
+        <span class="px-1.5 py-0.5 rounded text-xs bg-green-500/20 text-green-400" title="You can enroll in this template">
+            <i class="fas fa-check mr-1"></i>Yes
+        </span>
+        {% elif template.can_write %}
+        <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="You can modify this template">
+            <i class="fas fa-pen mr-1"></i>Write
+        </span>
+        {% else %}
+        <span class="text-neutral-500">No</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-3">
+        <div class="flex flex-wrap gap-1">
+            {% if template.enrollee_supplies_subject %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Enrollee Supplies Subject">ESS</span>
+            {% endif %}
+            {% if template.client_authentication %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400" title="Client Authentication">Auth</span>
+            {% endif %}
+            {% if not template.requires_manager_approval %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="No Manager Approval">NoApproval</span>
+            {% endif %}
+            {% if template.any_purpose %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400" title="Any Purpose EKU">Any</span>
+            {% endif %}
+            {% if template.enrollment_agent %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400" title="Enrollment Agent">Agent</span>
+            {% endif %}
+        </div>
+    </td>
+    <td class="px-4 py-3">
+        {% if template.vulnerabilities %}
+        <div class="flex flex-wrap gap-1">
+            {% for vuln in template.vulnerabilities %}
+            <span class="px-1.5 py-0.5 rounded text-xs font-mono {% if vuln.severity == 'Critical' %}bg-red-500/20 text-red-400{% else %}bg-orange-500/20 text-orange-400{% endif %}"
+                  title="{{ vuln.description }}">
+                {{ vuln.id }}
+            </span>
+            {% endfor %}
+        </div>
+        {% else %}
+        <span class="text-neutral-500">-</span>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+{% else %}
+<tr>
+    <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
+        <i class="fas fa-search text-2xl mb-2 block opacity-50"></i>
+        {% if vulnerable_only %}
+        No vulnerable templates found for your user
+        {% else %}
+        No templates found
+        {% endif %}
+    </td>
+</tr>
+{% endif %}

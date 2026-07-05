@@ -70,7 +70,7 @@ def getTGT(auth):
 
         except Exception as e:
             logging.error(f"An error occurred while trying to get a TGT : {e}")
-
+            return False
 
     else:
         as_req, diffie = build_pkinit_as_req(auth.username, auth.domain, auth.key, auth.cert)

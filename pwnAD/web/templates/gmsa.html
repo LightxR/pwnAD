@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - gMSA Accounts{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <div class="flex items-center gap-2">
+        <i class="fas fa-robot text-red-500"></i>
+        <h2 class="text-lg font-semibold text-white">Group Managed Service Accounts</h2>
+    </div>
+
+    {% if error is defined and error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">
+                Found: <span class="text-white font-medium">{{ results|length }}</span> gMSA account(s)
+            </span>
+        </div>
+        <div class="flex-1 overflow-auto scrollbar">
+            <table class="min-w-full text-left text-sm">
+                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">sAMAccountName</th>
+                        <th class="px-4 py-3 font-medium">DN</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-800/50">
+                    {% for r in results %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-2.5 text-white font-medium">{{ r.attributes.get('sAMAccountName', '') }}</td>
+                        <td class="px-4 py-2.5 text-xs text-neutral-400 font-mono">{{ r.dn }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if results|length == 0 and not error %}
+                    <tr><td colspan="2" class="px-4 py-8 text-center text-neutral-500">No gMSA accounts found</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-400">
+        <i class="fas fa-info-circle mr-2"></i>
+        gMSA password retrieval requires a TLS connection. Use the CLI for full password extraction with hash computation.
+    </div>
+</div>
+{% endblock %}

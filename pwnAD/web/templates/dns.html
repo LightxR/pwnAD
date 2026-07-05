@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - DNS Records{% endblock %}
+{% block content %}
+<div class="p-6 h-full flex flex-col gap-4">
+    <!-- Zone Selection -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-4">
+            <i class="fas fa-globe text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">DNS Records</h2>
+        </div>
+        <div class="flex flex-col md:flex-row gap-3">
+            <div class="flex-1">
+                <label class="block text-xs font-medium text-neutral-400 mb-1.5">DNS Zone</label>
+                <select id="zone-select" onchange="selectZone(this.value)"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <option value="">Select a zone...</option>
+                    {% for z in zones %}
+                    <option value="{{ z.name }}" {% if selected_zone == z.name %}selected{% endif %}>
+                        {{ z.name }} ({{ z.type }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if selected_zone %}
+    <!-- Add Record Form -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4" id="dns-add-panel">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-white">Add DNS Record</h3>
+        </div>
+        <form onsubmit="return submitDnsAdd(this)">
+            <input type="hidden" name="zone" value="{{ selected_zone }}">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+                <div>
+                    <label class="block text-xs text-neutral-400 mb-1">Name</label>
+                    <input type="text" name="name" required
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                        placeholder="hostname">
+                </div>
+                <div>
+                    <label class="block text-xs text-neutral-400 mb-1">Type</label>
+                    <select name="type"
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        {% for t in dns_types %}
+                        <option value="{{ t }}">{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-neutral-400 mb-1">Data</label>
+                    <input type="text" name="data" required
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                        placeholder="10.0.0.1">
+                </div>
+                <div>
+                    <label class="block text-xs text-neutral-400 mb-1">TTL</label>
+                    <input type="number" name="ttl" value="300"
+                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+                        <i class="fas fa-plus mr-1"></i> Add
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Records Table -->
+    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-neutral-400">
+                    Zone: <span class="text-white font-medium">{{ selected_zone }}</span>
+                    {% if records is not none %}
+                    | Records: <span class="text-white font-medium">{{ records|length }}</span>
+                    {% endif %}
+                </span>
+            </div>
+            <input type="text" placeholder="Filter records..."
+                class="w-48 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                oninput="filterDns(this.value)">
+        </div>
+        <div class="flex-1 overflow-auto scrollbar">
+            <table class="min-w-full text-left text-sm" id="dns-table">
+                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Name</th>
+                        <th class="px-4 py-3 font-medium w-24">Type</th>
+                        <th class="px-4 py-3 font-medium">Data</th>
+                        <th class="px-4 py-3 font-medium w-20">TTL</th>
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody id="dns-body">
+                    {% if records is not none %}
+                        {% include "partials/dns_records.html" %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- No zone selected -->
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center text-neutral-500">
+            <i class="fas fa-globe text-4xl mb-3 block"></i>
+            <p class="text-lg">Select a DNS zone to view records</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function selectZone(zone) {
+    if (zone) window.location.href = '/dns?zone=' + encodeURIComponent(zone);
+}
+
+function filterDns(q) {
+    document.querySelectorAll('#dns-body tr').forEach(function(r) {
+        r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    });
+}
+
+function submitDnsAdd(form) {
+    var formData = new FormData(form);
+    fetch('/dns/record/add', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+    return false;
+}
+
+async function removeDnsRecord(zone, name, recordData, type) {
+    var confirmed = await confirmModal('Remove DNS record ' + name + '?\n\nType: ' + type + '\nData: ' + recordData, 'Remove DNS Record');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('zone', zone);
+    formData.append('name', name);
+    formData.append('data', recordData);
+    formData.append('type', type);
+    fetch('/dns/record/remove', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+</script>
+{% endblock %}

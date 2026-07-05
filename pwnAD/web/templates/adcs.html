@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}ADCS - pwnAD{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white">
+            <i class="fas fa-certificate text-red-500 mr-3"></i>Certificate Authorities
+        </h1>
+        <p class="text-neutral-400 mt-2">Certificate Authority enumeration and ESC vulnerability detection</p>
+    </div>
+
+    {% if error %}
+    <div class="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4">
+            <div class="text-2xl font-bold text-white">{{ summary.total_cas }}</div>
+            <div class="text-sm text-neutral-400">Certificate Authorities</div>
+        </div>
+        <div class="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4">
+            <div class="text-2xl font-bold text-white">{{ summary.total_templates }}</div>
+            <div class="text-sm text-neutral-400">Templates</div>
+        </div>
+        <div class="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4 {% if summary.enrollable_templates > 0 %}border-green-500/50{% endif %}">
+            <div class="text-2xl font-bold {% if summary.enrollable_templates > 0 %}text-green-400{% else %}text-white{% endif %}">{{ summary.enrollable_templates }}</div>
+            <div class="text-sm text-neutral-400">You Can Enroll</div>
+        </div>
+        <div class="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4 {% if summary.vulnerable_templates > 0 %}border-orange-500/50{% endif %}">
+            <div class="text-2xl font-bold {% if summary.vulnerable_templates > 0 %}text-orange-400{% else %}text-white{% endif %}">{{ summary.vulnerable_templates }}</div>
+            <div class="text-sm text-neutral-400">Vulnerable (for you)</div>
+        </div>
+        <div class="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4 {% if summary.critical_templates > 0 %}border-red-500/50{% endif %}">
+            <div class="text-2xl font-bold {% if summary.critical_templates > 0 %}text-red-400{% else %}text-white{% endif %}">{{ summary.critical_templates }}</div>
+            <div class="text-sm text-neutral-400">Critical</div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Left: CA List -->
+        <div class="lg:col-span-1">
+            <div class="border border-neutral-800 rounded-lg p-4 bg-neutral-900/30">
+                <h2 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-server text-blue-400 mr-2"></i>Certificate Authorities
+                </h2>
+
+                {% if cas %}
+                <div class="space-y-2">
+                    <!-- All CAs option -->
+                    <a href="/adcs{% if vulnerable_only or enabled_only %}?{% endif %}{% if vulnerable_only %}vulnerable=true{% endif %}{% if vulnerable_only and enabled_only %}&{% endif %}{% if enabled_only %}enabled=true{% endif %}"
+                       class="block p-3 rounded-lg border transition {% if not selected_ca %}bg-red-500/10 border-red-500/50 text-white{% else %}border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white{% endif %}">
+                        <div class="font-medium">All CAs</div>
+                        <div class="text-xs text-neutral-500">{{ summary.total_templates }} templates</div>
+                    </a>
+
+                    {% for ca in cas %}
+                    <a href="/adcs?ca={{ ca.name|urlencode }}{% if vulnerable_only %}&vulnerable=true{% endif %}{% if enabled_only %}&enabled=true{% endif %}"
+                       class="block p-3 rounded-lg border transition {% if selected_ca == ca.name %}bg-red-500/10 border-red-500/50 text-white{% else %}border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white{% endif %}">
+                        <div class="font-medium truncate">{{ ca.name }}</div>
+                        <div class="text-xs text-neutral-500 truncate">{{ ca.dns_hostname }}</div>
+                        <div class="text-xs text-neutral-500">{{ summary.total_templates }} templates</div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-neutral-500 py-4">
+                    <i class="fas fa-times-circle text-2xl mb-2 block opacity-50"></i>
+                    No CAs found
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Filters -->
+            <div class="border border-neutral-800 rounded-lg p-4 bg-neutral-900/30 mt-4">
+                <h2 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-filter text-neutral-400 mr-2"></i>Filters
+                </h2>
+
+                <div class="space-y-3">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="enabled-filter"
+                               {% if enabled_only %}checked{% endif %}
+                               onchange="toggleEnabledFilter()"
+                               class="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-red-500 focus:ring-red-500/50">
+                        <span class="text-sm text-neutral-300 group-hover:text-white">Enabled Only</span>
+                    </label>
+
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="vulnerable-filter"
+                               {% if vulnerable_only %}checked{% endif %}
+                               onchange="toggleVulnerableFilter()"
+                               class="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-red-500 focus:ring-red-500/50">
+                        <span class="text-sm text-neutral-300 group-hover:text-white">Vulnerable Only</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- ESC Legend -->
+            <div class="border border-neutral-800 rounded-lg p-4 bg-neutral-900/30 mt-4">
+                <h2 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-shield-halved text-neutral-400 mr-2"></i>Vulnerability Types
+                </h2>
+                <div class="space-y-2 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono">ESC1</span>
+                        <span class="text-neutral-400">SAN Abuse</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC2</span>
+                        <span class="text-neutral-400">Any Purpose</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC3</span>
+                        <span class="text-neutral-400">Enroll Agent</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC4</span>
+                        <span class="text-neutral-400">DACL Abuse</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC5</span>
+                        <span class="text-neutral-400">PKI Object ACL</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC6</span>
+                        <span class="text-neutral-400">EDITF_ATTRIBUTESUBJECTALTNAME2</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC7</span>
+                        <span class="text-neutral-400">CA ACL Abuse</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC8</span>
+                        <span class="text-neutral-400">NTLM Relay to HTTP</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC9</span>
+                        <span class="text-neutral-400">No Security Ext</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC10</span>
+                        <span class="text-neutral-400">Weak Cert Mapping</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC11</span>
+                        <span class="text-neutral-400">NTLM Relay to ICPR</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC12</span>
+                        <span class="text-neutral-400">Shell Access to CA</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC13</span>
+                        <span class="text-neutral-400">OID Group Link</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono">ESC14</span>
+                        <span class="text-neutral-400">Weak Explicit Mapping</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono">ESC15</span>
+                        <span class="text-neutral-400">Schema V1 SAN</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Templates List -->
+        <div class="lg:col-span-3">
+            <div class="border border-neutral-800 rounded-lg bg-neutral-900/30">
+                <!-- Header -->
+                <div class="p-4 border-b border-neutral-800 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-white">
+                        <i class="fas fa-file-contract text-green-400 mr-2"></i>
+                        Certificate Templates
+                        <span class="text-sm font-normal text-neutral-400">({{ templates|length }})</span>
+                    </h2>
+                </div>
+
+                <!-- Templates Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-neutral-800 text-left">
+                                <th class="px-4 py-3 text-neutral-400 font-medium">Template Name</th>
+                                <th class="px-4 py-3 text-neutral-400 font-medium">Schema</th>
+                                <th class="px-4 py-3 text-neutral-400 font-medium">Enroll</th>
+                                <th class="px-4 py-3 text-neutral-400 font-medium">Properties</th>
+                                <th class="px-4 py-3 text-neutral-400 font-medium">Vulnerabilities</th>
+                            </tr>
+                        </thead>
+                        <tbody id="templates-body">
+                            {% if templates %}
+                            {% for template in templates %}
+                            <tr class="border-b border-neutral-800/50 hover:bg-white/5 cursor-pointer transition"
+                                onclick="showTemplateDetail('{{ template.name }}')"
+                                hx-get="/adcs/template/{{ template.name }}"
+                                hx-target="#template-detail-panel"
+                                hx-swap="innerHTML">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium text-white">{{ template.name }}</div>
+                                    {% if template.display_name != template.name %}
+                                    <div class="text-xs text-neutral-500">{{ template.display_name }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-neutral-400">
+                                    v{{ template.schema_version }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if template.can_enroll %}
+                                    <span class="px-1.5 py-0.5 rounded text-xs bg-green-500/20 text-green-400" title="You can enroll in this template">
+                                        <i class="fas fa-check mr-1"></i>Yes
+                                    </span>
+                                    {% elif template.can_write %}
+                                    <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="You can modify this template">
+                                        <i class="fas fa-pen mr-1"></i>Write
+                                    </span>
+                                    {% else %}
+                                    <span class="text-neutral-500">No</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex flex-wrap gap-1">
+                                        {% if template.enrollee_supplies_subject %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Enrollee Supplies Subject">ESS</span>
+                                        {% endif %}
+                                        {% if template.client_authentication %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400" title="Client Authentication">Auth</span>
+                                        {% endif %}
+                                        {% if not template.requires_manager_approval %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="No Manager Approval">NoApproval</span>
+                                        {% endif %}
+                                        {% if template.any_purpose %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400" title="Any Purpose EKU">Any</span>
+                                        {% endif %}
+                                        {% if template.enrollment_agent %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400" title="Enrollment Agent">Agent</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if template.vulnerabilities %}
+                                    <div class="flex flex-wrap gap-1">
+                                        {% for vuln in template.vulnerabilities %}
+                                        <span class="px-1.5 py-0.5 rounded text-xs font-mono {% if vuln.severity == 'Critical' %}bg-red-500/20 text-red-400{% else %}bg-orange-500/20 text-orange-400{% endif %}"
+                                              title="{{ vuln.description }}">
+                                            {{ vuln.id }}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <span class="text-neutral-500">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
+                                    <i class="fas fa-search text-2xl mb-2 block opacity-50"></i>
+                                    {% if vulnerable_only %}
+                                    No vulnerable templates found for your user
+                                    {% else %}
+                                    No templates found
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template Detail Slide-over Panel -->
+<div id="template-detail-overlay" class="hidden fixed inset-0 z-40 bg-black/50" onclick="closeTemplateDetail()"></div>
+<div id="template-detail-container" class="hidden fixed top-0 right-0 h-full w-full max-w-2xl z-50 bg-neutral-900 border-l border-neutral-800 shadow-2xl overflow-y-auto scrollbar transform translate-x-full transition-transform duration-300">
+    <div id="template-detail-panel" class="p-6">
+        <!-- Content loaded via HTMX -->
+    </div>
+</div>
+
+<script>
+function toggleVulnerableFilter() {
+    var checkbox = document.getElementById('vulnerable-filter');
+    var url = new URL(window.location);
+
+    if (checkbox.checked) {
+        url.searchParams.set('vulnerable', 'true');
+    } else {
+        url.searchParams.delete('vulnerable');
+    }
+
+    window.location = url.toString();
+}
+
+function toggleEnabledFilter() {
+    var checkbox = document.getElementById('enabled-filter');
+    var url = new URL(window.location);
+
+    if (checkbox.checked) {
+        url.searchParams.set('enabled', 'true');
+    } else {
+        url.searchParams.delete('enabled');
+    }
+
+    window.location = url.toString();
+}
+
+function showTemplateDetail(name) {
+    var overlay = document.getElementById('template-detail-overlay');
+    var container = document.getElementById('template-detail-container');
+
+    overlay.classList.remove('hidden');
+    container.classList.remove('hidden');
+
+    // Trigger animation
+    setTimeout(function() {
+        container.classList.remove('translate-x-full');
+    }, 10);
+}
+
+function closeTemplateDetail() {
+    var overlay = document.getElementById('template-detail-overlay');
+    var container = document.getElementById('template-detail-container');
+
+    container.classList.add('translate-x-full');
+
+    setTimeout(function() {
+        overlay.classList.add('hidden');
+        container.classList.add('hidden');
+    }, 300);
+}
+
+// Close on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeTemplateDetail();
+    }
+});
+</script>
+{% endblock %}

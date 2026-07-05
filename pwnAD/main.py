@@ -21,7 +21,7 @@ def main():
         return "You need to specify a target with --dc-ip"
 
     # Check if action requires a function
-    if not options.interactive:
+    if not options.interactive and not options.web:
         if options.action is None:
             logging.error("No action has been specified, use --help for more information")
             sys.exit(-1)
@@ -92,7 +92,10 @@ def main():
             connection = authenticate.ldap_authentication()
             logging.debug("Finishing authentication, starting action now")
 
-            if options.interactive:
+            if options.web:
+                from pwnAD.web.app import start_web
+                start_web(connection, host=options.web_host, port=options.web_port)
+            elif options.interactive:
                 start_interactive_mode(connection)
             else:
                 execute_action_function(options, connection)

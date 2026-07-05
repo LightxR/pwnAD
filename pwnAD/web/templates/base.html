@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}pwnAD{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar::-webkit-scrollbar-thumb { background: #525252; border-radius: 3px; }
+        .scrollbar::-webkit-scrollbar-thumb:hover { background: #737373; }
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-request.htmx-indicator { display: inline-block; }
+        tr.clickable-row:hover { background: rgba(255,255,255,0.03); cursor: pointer; }
+        .sidebar-link { @apply flex items-center gap-3 px-3 py-2 text-sm rounded-md font-medium text-neutral-400 hover:bg-white/5 hover:text-white transition; }
+        .sidebar-link.active { @apply bg-white/10 text-white; }
+        .sidebar-link i { @apply w-5 text-center opacity-70; }
+        .sidebar-link:hover i { @apply opacity-100; }
+        /* Collapsible sections */
+        .sidebar-section { @apply overflow-hidden transition-all duration-200; }
+        .sidebar-section.collapsed { max-height: 0 !important; opacity: 0; }
+        .sidebar-section.expanded { opacity: 1; }
+        .sidebar-header { @apply flex items-center justify-between cursor-pointer select-none; }
+        .sidebar-header:hover { @apply text-neutral-300; }
+        .sidebar-header .chevron { @apply transition-transform duration-200; }
+        .sidebar-header.collapsed .chevron { transform: rotate(-90deg); }
+        /* Toast animations */
+        @keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toast-out { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+        .toast-enter { animation: toast-in 0.3s ease-out; }
+        .toast-exit { animation: toast-out 0.3s ease-in forwards; }
+        /* Modal animations */
+        @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes modal-fade-out { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes modal-scale-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+        .modal-backdrop-enter { animation: modal-fade-in 0.15s ease-out; }
+        .modal-backdrop-exit { animation: modal-fade-out 0.15s ease-in forwards; }
+        .modal-content-enter { animation: modal-scale-in 0.15s ease-out; }
+        .modal-content-exit { animation: modal-scale-out 0.15s ease-in forwards; }
+    </style>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    accent: { DEFAULT: '#ef4444', hover: '#dc2626', subtle: '#fca5a5' }
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-neutral-950 text-neutral-300 h-screen flex overflow-hidden">
+    <!-- Sidebar -->
+    <nav class="hidden md:flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 p-4 h-screen overflow-y-auto scrollbar">
+        <!-- Logo -->
+        <a href="/" class="ml-1 mb-6 text-2xl font-bold text-white">
+            pwn<span class="text-red-500">AD</span>
+            <span class="text-[0.6rem] align-super font-medium bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded ml-1">Web</span>
+        </a>
+
+        <!-- Navigation -->
+        <div class="flex flex-col gap-1 flex-1">
+            <a href="/" class="sidebar-link {% if active_page == 'dashboard' %}active{% endif %}">
+                <i class="fas fa-gauge-high"></i>
+                <span>Dashboard</span>
+            </a>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Objects</div>
+
+            <a href="/browse/users" class="sidebar-link {% if active_page == 'users' %}active{% endif %}">
+                <i class="fas fa-user"></i>
+                <span>Users</span>
+                {% if counts and counts.users is defined %}<span class="ml-auto text-xs text-neutral-500">{{ counts.users }}</span>{% endif %}
+            </a>
+            <a href="/browse/groups" class="sidebar-link {% if active_page == 'groups' %}active{% endif %}">
+                <i class="fas fa-users"></i>
+                <span>Groups</span>
+                {% if counts and counts.groups is defined %}<span class="ml-auto text-xs text-neutral-500">{{ counts.groups }}</span>{% endif %}
+            </a>
+            <a href="/browse/computers" class="sidebar-link {% if active_page == 'computers' %}active{% endif %}">
+                <i class="fas fa-desktop"></i>
+                <span>Computers</span>
+                {% if counts and counts.computers is defined %}<span class="ml-auto text-xs text-neutral-500">{{ counts.computers }}</span>{% endif %}
+            </a>
+            <a href="/browse/ous" class="sidebar-link {% if active_page == 'ous' %}active{% endif %}">
+                <i class="fas fa-sitemap"></i>
+                <span>OUs</span>
+                {% if counts and counts.ous is defined %}<span class="ml-auto text-xs text-neutral-500">{{ counts.ous }}</span>{% endif %}
+            </a>
+            <a href="/adcs" class="sidebar-link {% if active_page == 'adcs' %}active{% endif %}">
+                <i class="fas fa-certificate"></i>
+                <span>Certificate Authorities</span>
+            </a>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">LDAP</div>
+
+            <a href="/queries" class="sidebar-link {% if active_page == 'queries' or active_page in ['kerberoastables', 'asreproastables', 'unconstrained', 'constrained', 'rbcd', 'admin_count', 'protected_users', 'passwords_dont_expire', 'users_description', 'sid_history'] %}active{% endif %}">
+                <i class="fas fa-filter"></i>
+                <span>Builtin Queries</span>
+            </a>
+            <a href="/query/custom" class="sidebar-link {% if active_page == 'custom' %}active{% endif %}">
+                <i class="fas fa-terminal"></i>
+                <span>Custom LDAP</span>
+            </a>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Security</div>
+
+            <a href="/dacl" class="sidebar-link {% if active_page == 'dacl' %}active{% endif %}">
+                <i class="fas fa-lock"></i>
+                <span>DACL Editor</span>
+            </a>
+            <a href="/shadow" class="sidebar-link {% if active_page == 'shadow' %}active{% endif %}">
+                <i class="fas fa-key"></i>
+                <span>Shadow Credentials</span>
+            </a>
+            <a href="/attacks" class="sidebar-link {% if active_page == 'attacks' %}active{% endif %}">
+                <i class="fas fa-crosshairs"></i>
+                <span>Attacks</span>
+            </a>
+            <a href="/writable" class="sidebar-link {% if active_page == 'writable' %}active{% endif %}">
+                <i class="fas fa-pen"></i>
+                <span>Writable Objects</span>
+            </a>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Network</div>
+
+            <a href="/dns" class="sidebar-link {% if active_page == 'dns' %}active{% endif %}">
+                <i class="fas fa-globe"></i>
+                <span>DNS Records</span>
+            </a>
+        </div>
+
+        <!-- Connection Info -->
+        <div class="mt-auto pt-4 border-t border-neutral-800">
+            <div class="px-2 py-2">
+                <div class="text-sm font-bold text-white">{{ session_user or 'N/A' }}</div>
+                <div class="text-xs text-neutral-500">{{ domain or '' }}</div>
+                <div class="text-xs text-neutral-500">{{ dc_ip or '' }}</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span class="text-xs text-green-400">Connected</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile header -->
+    <div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-neutral-900 border-b border-neutral-800 px-4 py-3 flex items-center justify-between">
+        <a href="/" class="text-lg font-bold text-white">pwn<span class="text-red-500">AD</span></a>
+        <button onclick="document.getElementById('mobile-nav').classList.toggle('hidden')" class="text-neutral-400 hover:text-white">
+            <i class="fas fa-bars text-lg"></i>
+        </button>
+    </div>
+    <div id="mobile-nav" class="hidden md:hidden fixed inset-0 z-20 bg-neutral-900/95 pt-16 p-4 overflow-y-auto">
+        <a href="/" class="sidebar-link"><i class="fas fa-gauge-high"></i> Dashboard</a>
+        <a href="/browse/users" class="sidebar-link"><i class="fas fa-user"></i> Users</a>
+        <a href="/browse/groups" class="sidebar-link"><i class="fas fa-users"></i> Groups</a>
+        <a href="/browse/computers" class="sidebar-link"><i class="fas fa-desktop"></i> Computers</a>
+        <a href="/browse/ous" class="sidebar-link"><i class="fas fa-sitemap"></i> OUs</a>
+        <a href="/queries" class="sidebar-link"><i class="fas fa-filter"></i> Builtin Queries</a>
+        <a href="/query/custom" class="sidebar-link"><i class="fas fa-terminal"></i> Custom LDAP</a>
+        <a href="/dacl" class="sidebar-link"><i class="fas fa-lock"></i> DACL Editor</a>
+        <a href="/shadow" class="sidebar-link"><i class="fas fa-key"></i> Shadow Credentials</a>
+        <a href="/attacks" class="sidebar-link"><i class="fas fa-crosshairs"></i> Attacks</a>
+        <a href="/writable" class="sidebar-link"><i class="fas fa-pen"></i> Writable Objects</a>
+        <a href="/adcs" class="sidebar-link"><i class="fas fa-certificate"></i> Certificate Authorities</a>
+        <a href="/dns" class="sidebar-link"><i class="fas fa-globe"></i> DNS Records</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 h-screen overflow-y-auto scrollbar md:pt-0 pt-14">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm"></div>
+
+    <!-- Search Modal Container -->
+    <div id="search-modal" class="hidden fixed inset-0 z-[100]">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSearchModal(null)"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="w-full max-w-lg rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+                <div class="p-5 border-b border-neutral-800">
+                    <h3 id="search-modal-title" class="text-lg font-semibold text-white mb-3"></h3>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm"></i>
+                        <input type="text" id="search-modal-input" placeholder="Search users, groups, computers..."
+                            class="w-full rounded-lg border border-neutral-600 bg-neutral-800 pl-10 pr-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                            oninput="debounceSearchModal(this.value)" autocomplete="off">
+                    </div>
+                </div>
+                <div id="search-modal-results" class="max-h-72 overflow-y-auto scrollbar">
+                    <div class="p-4 text-center text-neutral-500 text-sm">
+                        <i class="fas fa-search text-2xl mb-2 block opacity-50"></i>
+                        Type at least 2 characters to search
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-neutral-800 bg-neutral-900/50 rounded-b-xl">
+                    <button onclick="closeSearchModal(null)"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="hidden fixed inset-0 z-[100]">
+        <div id="modal-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div id="modal-content" class="w-full max-w-md rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+                <div class="p-5">
+                    <div class="flex items-start gap-4">
+                        <div id="modal-icon" class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center">
+                            <!-- Icon inserted dynamically -->
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 id="modal-title" class="text-lg font-semibold text-white mb-1"></h3>
+                            <p id="modal-message" class="text-sm text-neutral-400 whitespace-pre-wrap break-words"></p>
+                            <div id="modal-input-wrap" class="hidden mt-3">
+                                <div class="relative">
+                                    <input type="text" id="modal-input"
+                                        class="w-full rounded-lg border border-neutral-600 bg-neutral-800 px-4 py-2.5 pr-10 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50 transition">
+                                    <button type="button" id="modal-toggle-password" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white transition" onclick="togglePasswordVisibility()">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-neutral-800 bg-neutral-900/50 rounded-b-xl">
+                    <button id="modal-cancel"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition">
+                        Cancel
+                    </button>
+                    <button id="modal-confirm"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-white transition">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Toast system
+    function showToast(message, type) {
+        type = type || 'success';
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        var colors = {
+            success: 'bg-green-500/10 border-green-500/50 text-green-400',
+            error: 'bg-red-500/10 border-red-500/50 text-red-400',
+            info: 'bg-blue-500/10 border-blue-500/50 text-blue-400',
+            warning: 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400'
+        };
+        var icons = {
+            success: 'fa-check-circle',
+            error: 'fa-times-circle',
+            info: 'fa-info-circle',
+            warning: 'fa-exclamation-triangle'
+        };
+        toast.className = 'flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium toast-enter ' + (colors[type] || colors.info);
+        toast.innerHTML = '<i class="fas ' + (icons[type] || icons.info) + '"></i><span>' + message + '</span>';
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.classList.remove('toast-enter');
+            toast.classList.add('toast-exit');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
+    }
+
+    // Modal system
+    var _modalResolve = null;
+    var _modalIsPrompt = false;
+
+    function showModal(options) {
+        var container = document.getElementById('modal-container');
+        var backdrop = document.getElementById('modal-backdrop');
+        var content = document.getElementById('modal-content');
+        var icon = document.getElementById('modal-icon');
+        var title = document.getElementById('modal-title');
+        var message = document.getElementById('modal-message');
+        var inputWrap = document.getElementById('modal-input-wrap');
+        var input = document.getElementById('modal-input');
+        var cancelBtn = document.getElementById('modal-cancel');
+        var confirmBtn = document.getElementById('modal-confirm');
+
+        // Set content
+        title.textContent = options.title || 'Confirm';
+        message.textContent = options.message || '';
+
+        // Set icon based on type
+        var iconConfig = {
+            danger: { bg: 'bg-red-500/20', color: 'text-red-400', icon: 'fa-triangle-exclamation' },
+            warning: { bg: 'bg-yellow-500/20', color: 'text-yellow-400', icon: 'fa-exclamation-circle' },
+            info: { bg: 'bg-blue-500/20', color: 'text-blue-400', icon: 'fa-info-circle' },
+            prompt: { bg: 'bg-neutral-700', color: 'text-neutral-300', icon: 'fa-pen' }
+        };
+        var cfg = iconConfig[options.type] || iconConfig.danger;
+        icon.className = 'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ' + cfg.bg;
+        icon.innerHTML = '<i class="fas ' + cfg.icon + ' ' + cfg.color + '"></i>';
+
+        // Configure confirm button
+        var btnColors = {
+            danger: 'bg-red-600 hover:bg-red-500',
+            warning: 'bg-yellow-600 hover:bg-yellow-500',
+            info: 'bg-blue-600 hover:bg-blue-500',
+            prompt: 'bg-red-600 hover:bg-red-500'
+        };
+        confirmBtn.className = 'px-4 py-2 rounded-lg text-sm font-medium text-white transition ' + (btnColors[options.type] || btnColors.danger);
+        confirmBtn.textContent = options.confirmText || 'OK';
+        cancelBtn.textContent = options.cancelText || 'Cancel';
+
+        // Handle prompt mode
+        _modalIsPrompt = options.isPrompt || false;
+        var toggleBtn = document.getElementById('modal-toggle-password');
+        if (_modalIsPrompt) {
+            inputWrap.classList.remove('hidden');
+            input.value = options.defaultValue || '';
+            input.placeholder = options.placeholder || '';
+            input.type = options.inputType || 'text';
+            // Show/hide password toggle button
+            if (options.inputType === 'password') {
+                toggleBtn.classList.remove('hidden');
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            } else {
+                toggleBtn.classList.add('hidden');
+            }
+        } else {
+            inputWrap.classList.add('hidden');
+            toggleBtn.classList.add('hidden');
+        }
+
+        // Show modal with animation
+        container.classList.remove('hidden');
+        backdrop.classList.remove('modal-backdrop-exit');
+        backdrop.classList.add('modal-backdrop-enter');
+        content.classList.remove('modal-content-exit');
+        content.classList.add('modal-content-enter');
+
+        // Focus appropriate element
+        if (_modalIsPrompt) {
+            setTimeout(function() { input.focus(); input.select(); }, 50);
+        } else {
+            setTimeout(function() { confirmBtn.focus(); }, 50);
+        }
+
+        return new Promise(function(resolve) {
+            _modalResolve = resolve;
+        });
+    }
+
+    function closeModal(result) {
+        var container = document.getElementById('modal-container');
+        var backdrop = document.getElementById('modal-backdrop');
+        var content = document.getElementById('modal-content');
+
+        backdrop.classList.remove('modal-backdrop-enter');
+        backdrop.classList.add('modal-backdrop-exit');
+        content.classList.remove('modal-content-enter');
+        content.classList.add('modal-content-exit');
+
+        setTimeout(function() {
+            container.classList.add('hidden');
+            if (_modalResolve) {
+                _modalResolve(result);
+                _modalResolve = null;
+            }
+        }, 150);
+    }
+
+    // Modal event handlers
+    document.getElementById('modal-confirm').addEventListener('click', function() {
+        if (_modalIsPrompt) {
+            closeModal(document.getElementById('modal-input').value);
+        } else {
+            closeModal(true);
+        }
+    });
+
+    document.getElementById('modal-cancel').addEventListener('click', function() {
+        closeModal(_modalIsPrompt ? null : false);
+    });
+
+    document.getElementById('modal-backdrop').addEventListener('click', function() {
+        closeModal(_modalIsPrompt ? null : false);
+    });
+
+    document.getElementById('modal-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            closeModal(this.value);
+        } else if (e.key === 'Escape') {
+            closeModal(null);
+        }
+    });
+
+    document.getElementById('modal-content').addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeModal(_modalIsPrompt ? null : false);
+        }
+    });
+
+    // Helper functions for common use cases
+    function confirmModal(message, title) {
+        return showModal({
+            title: title || 'Confirm',
+            message: message,
+            type: 'danger',
+            confirmText: 'OK',
+            cancelText: 'Cancel'
+        });
+    }
+
+    function confirmDanger(message, title) {
+        return showModal({
+            title: title || 'Warning',
+            message: message,
+            type: 'danger',
+            confirmText: 'Delete',
+            cancelText: 'Cancel'
+        });
+    }
+
+    function promptModal(message, title, defaultValue) {
+        return showModal({
+            title: title || 'Input Required',
+            message: message,
+            type: 'prompt',
+            isPrompt: true,
+            defaultValue: defaultValue || '',
+            confirmText: 'OK',
+            cancelText: 'Cancel'
+        });
+    }
+
+    function promptPassword(message, title) {
+        return showModal({
+            title: title || 'Enter Password',
+            message: message,
+            type: 'prompt',
+            isPrompt: true,
+            inputType: 'password',
+            confirmText: 'Set Password',
+            cancelText: 'Cancel'
+        });
+    }
+
+    function togglePasswordVisibility() {
+        var input = document.getElementById('modal-input');
+        var toggleBtn = document.getElementById('modal-toggle-password');
+        if (input.type === 'password') {
+            input.type = 'text';
+            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+        } else {
+            input.type = 'password';
+            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        }
+        input.focus();
+    }
+
+    // Listen for HTMX toast events
+    document.body.addEventListener('showToast', function(evt) {
+        showToast(evt.detail.message, evt.detail.type);
+    });
+
+    // Listen for HX-Trigger header responses
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        var trigger = evt.detail.xhr.getResponseHeader('HX-Trigger');
+        if (trigger) {
+            try {
+                var data = JSON.parse(trigger);
+                if (data.showToast) {
+                    showToast(data.showToast.message, data.showToast.type);
+                }
+            } catch(e) {}
+        }
+    });
+
+    // Search Modal system
+    var _searchModalResolve = null;
+    var _searchModalTimer = null;
+    var _searchModalTypeFilter = null;
+
+    function openSearchModal(title, typeFilter) {
+        var modal = document.getElementById('search-modal');
+        var titleEl = document.getElementById('search-modal-title');
+        var input = document.getElementById('search-modal-input');
+        var results = document.getElementById('search-modal-results');
+
+        _searchModalTypeFilter = typeFilter || null;
+        titleEl.textContent = title;
+        input.value = '';
+
+        var placeholder = 'Search ';
+        if (typeFilter === 'group') placeholder += 'groups...';
+        else if (typeFilter === 'user') placeholder += 'users...';
+        else if (typeFilter === 'computer') placeholder += 'computers...';
+        else placeholder += 'users, groups, computers...';
+        input.placeholder = placeholder;
+
+        results.innerHTML = '<div class="p-4 text-center text-neutral-500 text-sm"><i class="fas fa-search text-2xl mb-2 block opacity-50"></i>Type at least 2 characters to search</div>';
+        modal.classList.remove('hidden');
+        setTimeout(function() { input.focus(); }, 50);
+
+        return new Promise(function(resolve) {
+            _searchModalResolve = resolve;
+        });
+    }
+
+    function closeSearchModal(result) {
+        var modal = document.getElementById('search-modal');
+        modal.classList.add('hidden');
+        if (_searchModalResolve) {
+            _searchModalResolve(result);
+            _searchModalResolve = null;
+        }
+    }
+
+    function debounceSearchModal(query) {
+        clearTimeout(_searchModalTimer);
+        var results = document.getElementById('search-modal-results');
+
+        if (query.length < 2) {
+            results.innerHTML = '<div class="p-4 text-center text-neutral-500 text-sm"><i class="fas fa-search text-2xl mb-2 block opacity-50"></i>Type at least 2 characters to search</div>';
+            return;
+        }
+
+        results.innerHTML = '<div class="p-4 text-center text-neutral-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Searching...</div>';
+
+        _searchModalTimer = setTimeout(function() {
+            var url = '/api/principals/search?q=' + encodeURIComponent(query);
+            if (_searchModalTypeFilter) url += '&type=' + _searchModalTypeFilter;
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.length) {
+                        results.innerHTML = '<div class="p-4 text-center text-neutral-500 text-sm"><i class="fas fa-times-circle text-2xl mb-2 block opacity-50"></i>No results found</div>';
+                        return;
+                    }
+                    var html = data.map(function(item) {
+                        var icon = 'fa-question';
+                        var color = 'text-neutral-400';
+                        if (item.type === 'user') { icon = 'fa-user'; color = 'text-blue-400'; }
+                        else if (item.type === 'group') { icon = 'fa-users'; color = 'text-green-400'; }
+                        else if (item.type === 'computer') { icon = 'fa-desktop'; color = 'text-purple-400'; }
+
+                        return '<button onclick="closeSearchModal(\'' + item.sam.replace(/'/g, "\\'") + '\')" ' +
+                            'class="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition text-left border-b border-neutral-800/50 last:border-0">' +
+                            '<i class="fas ' + icon + ' ' + color + ' w-5 text-center"></i>' +
+                            '<div class="flex-1 min-w-0">' +
+                            '<div class="text-sm font-medium text-white truncate">' + item.sam + '</div>' +
+                            '<div class="text-xs text-neutral-500 truncate">' + (item.dn || '') + '</div>' +
+                            '</div>' +
+                            '<i class="fas fa-chevron-right text-neutral-600 text-xs"></i>' +
+                            '</button>';
+                    }).join('');
+                    results.innerHTML = html;
+                })
+                .catch(function() {
+                    results.innerHTML = '<div class="p-4 text-center text-red-400 text-sm"><i class="fas fa-exclamation-triangle text-2xl mb-2 block"></i>Search failed</div>';
+                });
+        }, 300);
+    }
+
+    // Close search modal on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !document.getElementById('search-modal').classList.contains('hidden')) {
+            closeSearchModal(null);
+        }
+    });
+
+    // Sidebar collapse/expand functionality
+    function toggleSection(name) {
+        var section = document.getElementById('section-' + name);
+        var header = section.previousElementSibling;
+        var isCollapsed = section.classList.contains('collapsed');
+
+        if (isCollapsed) {
+            section.classList.remove('collapsed');
+            section.classList.add('expanded');
+            header.classList.remove('collapsed');
+        } else {
+            section.classList.add('collapsed');
+            section.classList.remove('expanded');
+            header.classList.add('collapsed');
+        }
+        saveSidebarState();
+    }
+
+    function saveSidebarState() {
+        var state = { sections: {} };
+        document.querySelectorAll('.sidebar-section').forEach(function(el) {
+            var id = el.id.replace('section-', '');
+            state.sections[id] = el.classList.contains('collapsed');
+        });
+        localStorage.setItem('pwnAD_sidebar', JSON.stringify(state));
+    }
+
+    function restoreSidebarState() {
+        var saved = localStorage.getItem('pwnAD_sidebar');
+        if (!saved) {
+            // Default: queries section collapsed
+            var queries = document.getElementById('section-queries');
+            var header = queries ? queries.previousElementSibling : null;
+            if (queries && header) {
+                queries.classList.add('collapsed');
+                header.classList.add('collapsed');
+            }
+            return;
+        }
+        try {
+            var state = JSON.parse(saved);
+            Object.keys(state.sections || {}).forEach(function(id) {
+                var section = document.getElementById('section-' + id);
+                var header = section ? section.previousElementSibling : null;
+                if (section && header && state.sections[id]) {
+                    section.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            });
+        } catch(e) {}
+    }
+
+    // Initialize sidebar state on load
+    document.addEventListener('DOMContentLoaded', restoreSidebarState);
+
+    // Inline edit helpers
+    function startInlineEdit(el) {
+        var currentValue = el.textContent.trim();
+        var dn = el.dataset.dn;
+        var attr = el.dataset.attr;
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.className = 'w-full bg-neutral-950 border border-red-500/50 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50';
+        input.dataset.dn = dn;
+        input.dataset.attr = attr;
+        input.dataset.oldValue = currentValue;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { submitInlineEdit(input); }
+            if (e.key === 'Escape') { cancelInlineEdit(input, el); }
+        });
+        input.addEventListener('blur', function() { submitInlineEdit(input); });
+
+        el.replaceWith(input);
+        input.focus();
+        input.select();
+    }
+
+    function submitInlineEdit(input) {
+        var newValue = input.value.trim();
+        var oldValue = input.dataset.oldValue;
+        if (newValue === oldValue) {
+            cancelInlineEditRestore(input, oldValue);
+            return;
+        }
+        var formData = new FormData();
+        formData.append('dn', input.dataset.dn);
+        formData.append('attr', input.dataset.attr);
+        formData.append('old_value', oldValue);
+        formData.append('new_value', newValue);
+        fetch('/api/attribute/modify', { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) { cancelInlineEditRestore(input, newValue); }
+                else { cancelInlineEditRestore(input, oldValue); }
+            })
+            .catch(function() {
+                showToast('Request failed', 'error');
+                cancelInlineEditRestore(input, oldValue);
+            });
+    }
+
+    function cancelInlineEdit(input, originalEl) {
+        input.replaceWith(originalEl);
+    }
+
+    function cancelInlineEditRestore(input, value) {
+        var span = document.createElement('span');
+        span.className = 'editable-value text-xs cursor-pointer hover:bg-white/5 px-1 py-0.5 rounded';
+        span.textContent = value;
+        span.dataset.dn = input.dataset.dn;
+        span.dataset.attr = input.dataset.attr;
+        span.addEventListener('dblclick', function() { startInlineEdit(span); });
+        input.replaceWith(span);
+    }
+    </script>
+</body>
+</html>

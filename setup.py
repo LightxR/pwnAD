@@ -8,7 +8,7 @@ setup(
     version="0.0.1",
     license="MIT",
     author="LightxR",
-    url="https://github.com/LightxR/ADL",
+    url="https://github.com/LightxR/pwnAD",
     long_description=readme,
     long_description_content_type="text/markdown",
     install_requires=[
@@ -19,12 +19,19 @@ setup(
         "ldap3==2.10.2rc3",
         "pyasn1==0.4.8",
         "dsinternals",
+        "flask",
+        "waitress",
     ],
     packages=[
         "pwnAD",
         "pwnAD.commands",
         "pwnAD.lib",
+        "pwnAD.web",
+        "pwnAD.web.routes",
     ],
+    package_data={
+        "pwnAD.web": ["templates/*.html", "templates/partials/*.html", "static/*"],
+    },
     entry_points={
         "console_scripts": ["pwnAD=pwnAD.main:main"],
     },

@@ -2,6 +2,7 @@ import argparse
 import sys
 import re
 from impacket.krb5 import constants
+from pwnAD.lib.logger import LIGHT_RED, RESET
 
 
 class PwnADHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -11,10 +12,12 @@ class PwnADHelpFormatter(argparse.RawDescriptionHelpFormatter):
         super().__init__(prog, indent_increment, max_help_position, width)
 
     def _metavar_formatter(self, action, default_metavar):
-        # Suppress subparsers choices display in usage line
+        # Suppress subparsers choices display in usage line.
+        # argparse unpacks the result as a tuple (e.g. `metavar, = fmt(1)`),
+        # so this must always return a tuple, never a bare string.
         if isinstance(action, argparse._SubParsersAction):
             def format(tuple_size):
-                return '<command>' if tuple_size == 1 else ('<command>',) * tuple_size
+                return ('<command>',) * tuple_size
             return format
         return super()._metavar_formatter(action, default_metavar)
 
@@ -30,7 +33,7 @@ class PwnADArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         """Override error to show help instead of ugly error message."""
-        sys.stderr.write(f'\n\033[91m[-] Error: {self._clean_error_message(message)}\033[0m\n\n')
+        sys.stderr.write(f'\n{LIGHT_RED}[-] Error: {self._clean_error_message(message)}{RESET}\n\n')
         self.print_help(sys.stderr)
         sys.exit(2)
 
@@ -72,6 +75,11 @@ def authentication_args(parser):
 
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("-i", "--interactive", dest="interactive", action="store_true", default=None, help="Start interactive shell")
+
+    web = parser.add_argument_group("Web Interface")
+    web.add_argument("--web", dest="web", action="store_true", default=False, help="Start web interface instead of CLI")
+    web.add_argument("--web-host", dest="web_host", metavar="HOST", default="127.0.0.1", help="Web server bind address (default: 127.0.0.1)")
+    web.add_argument("--web-port", dest="web_port", metavar="PORT", type=int, default=5000, help="Web server port (default: 5000)")
 
 
 def get_parser(interactive=False):
@@ -309,6 +317,12 @@ Functions:
   Credentials:
     laps, gmsa
 
+  ADCS (Certificate Services):
+    adcs
+
+  Recycle Bin:
+    deleted                 List deleted objects from AD Recycle Bin
+
   Miscellaneous:
     owner, machine_quota, writable, protected_users, users_description,
     passwords_dont_expire, users_with_admin_count, accounts_with_sid_histoy,
@@ -435,6 +449,19 @@ Functions:
     get_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Display raw attribute values")
     all_subparsers.append(get_attribute_parser)
 
+    get_adcs_parser = get_subparsers.add_parser('adcs', help="Full ADCS enumeration (CAs, templates, ESC1-ESC15)")
+    get_adcs_parser.add_argument("--vulnerable", dest="vulnerable_only", action="store_true", help="Show only vulnerable templates")
+    get_adcs_parser.add_argument("--format", dest="format", choices=["text", "json", "csv"], default="text", help="Output format (default: text)")
+    get_adcs_parser.add_argument("-o", "--output", dest="output", action="store", metavar="FILE", help="Output file path (base name for CSV)")
+    get_adcs_parser.add_argument("--stdout", dest="stdout", action="store_true", help="Force output to stdout even with --output")
+    get_adcs_parser.add_argument("--no-ca-config", dest="ca_config", action="store_false", default=True, help="Don't try to get CA config via RRP")
+    all_subparsers.append(get_adcs_parser)
+
+    get_deleted_parser = get_subparsers.add_parser('deleted', help="List deleted objects from AD Recycle Bin")
+    get_deleted_parser.add_argument("target", nargs="?", action="store", default=None, help="Optional target to search for (sAMAccountName, SID, or name pattern)")
+    get_deleted_parser.add_argument("--otype", dest="otype", action="store", default="*", choices=["*", "user", "computer", "group"], help="Object type filter (default: all)")
+    all_subparsers.append(get_deleted_parser)
+
     # MODIFY action
     modify_description = """
 Modify Active Directory object attributes.
@@ -442,7 +469,8 @@ Modify Active Directory object attributes.
 Functions:
   Credentials:   password
   Properties:    owner, computer_name, dontreqpreauth, attribute
-  Account:       disable_account, enable_account"""
+  Account:       disable_account, enable_account
+  Recycle Bin:   restore_deleted"""
 
     parser_modify = subparsers.add_parser(
         'modify',
@@ -490,6 +518,12 @@ Functions:
     modify_attribute_parser.add_argument("--raw", dest="raw", action="store_true", help="Send values as-is without encoding")
     modify_attribute_parser.add_argument("--b64", dest="b64", action="store_true", help="Decode values from base64")
     all_subparsers.append(modify_attribute_parser)
+
+    modify_restore_deleted_parser = modify_subparsers.add_parser('restore_deleted', help="Restore a deleted object from AD Recycle Bin")
+    modify_restore_deleted_parser.add_argument("target", action="store", help="Target to restore (sAMAccountName, objectSid, or DN)")
+    modify_restore_deleted_parser.add_argument("--new-name", dest="new_name", action="store", default=None, help="New name for the restored object")
+    modify_restore_deleted_parser.add_argument("--new-parent", dest="new_parent", action="store", default=None, help="New parent container DN (default: original location)")
+    all_subparsers.append(modify_restore_deleted_parser)
 
 
     # QUERY action

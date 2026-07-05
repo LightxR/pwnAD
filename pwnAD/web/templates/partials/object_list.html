@@ -1,0 +1,60 @@
+{% for item in results %}
+<tr class="hover:bg-white/[0.02] transition">
+    {% for col in cfg.columns %}
+    <td class="px-4 py-2.5 text-neutral-300">
+        {% set val = item.attributes.get(col.attr, '') %}
+        {% if loop.first %}
+            <a href="/object?dn={{ item.dn|urlencode }}" class="hover:text-blue-400 transition">
+        {% endif %}
+        {% if val is iterable and val is not string %}
+            {% if val|length > 3 %}
+                {{ val[:3]|join(', ') }} <span class="text-neutral-500 text-xs">+{{ val|length - 3 }}</span>
+            {% elif val|length == 0 %}
+                <span class="text-neutral-600">-</span>
+            {% else %}
+                {{ val|join(', ') }}
+            {% endif %}
+        {% elif val %}
+            {{ val }}
+        {% else %}
+            <span class="text-neutral-600">-</span>
+        {% endif %}
+        {% if loop.first %}
+            </a>
+        {% endif %}
+    </td>
+    {% endfor %}
+    <td class="px-4 py-2.5 flex items-center gap-3 justify-end">
+        <a href="/object?dn={{ item.dn|urlencode }}" class="text-xs text-blue-400 hover:text-blue-300 transition" title="View details">
+            <i class="fas fa-arrow-right"></i>
+        </a>
+        <button onclick='deleteObject({{ item.dn|tojson }})'
+            class="text-xs text-red-400/50 hover:text-red-400 transition" title="Delete object">
+            <i class="fas fa-trash"></i>
+        </button>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td colspan="{{ cfg.columns|length + 1 }}" class="px-4 py-8 text-center text-neutral-500">
+        <i class="fas fa-magnifying-glass text-2xl mb-2 block"></i>
+        No results found
+    </td>
+</tr>
+{% endfor %}
+
+<script>
+async function deleteObject(dn) {
+    var confirmed = await confirmDanger('This action cannot be undone.\n\n' + dn, 'Delete Object');
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('dn', dn);
+    fetch('/api/object/delete', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+</script>

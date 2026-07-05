@@ -1,0 +1,62 @@
+{% for ace in aces %}
+<tr class="hover:bg-white/[0.02] transition border-t border-neutral-800/50">
+    <td class="px-4 py-2.5">
+        {% if 'ALLOWED' in ace.type %}
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/30">
+                <i class="fas fa-check text-[10px]"></i> Allow
+            </span>
+        {% elif 'DENIED' in ace.type %}
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30">
+                <i class="fas fa-ban text-[10px]"></i> Deny
+            </span>
+        {% else %}
+            <span class="text-xs text-neutral-500">{{ ace.type }}</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2.5 text-sm">
+        <div class="text-white font-medium">{{ ace.trustee_name }}</div>
+        {% if ace.trustee_name != ace.sid %}
+        <div class="text-xs text-neutral-500 font-mono">{{ ace.sid }}</div>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2.5 text-xs">
+        {% for r in ace.rights %}
+            <span class="inline-block bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded mr-1 mb-1">{{ r }}</span>
+        {% endfor %}
+    </td>
+    <td class="px-4 py-2.5 text-xs font-mono text-neutral-400">
+        {% if ace.object_type %}
+            {% if ace.object_type_name is defined and ace.object_type_name %}
+                <span class="text-blue-400">{{ ace.object_type_name }}</span>
+                <br><span class="text-neutral-600">{{ ace.object_type }}</span>
+            {% else %}
+                {{ ace.object_type }}
+            {% endif %}
+        {% else %}
+            <span class="text-neutral-600">-</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2.5 text-xs">
+        {% if ace.inherited %}
+            <span class="text-yellow-400"><i class="fas fa-arrow-down"></i> Yes</span>
+        {% else %}
+            <span class="text-neutral-500">No</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2.5">
+        {% if not ace.inherited %}
+        <button onclick="removeAce('{{ target_dn }}', '{{ ace.index }}')"
+            class="text-red-400 hover:text-red-300 text-xs" title="Remove ACE">
+            <i class="fas fa-trash"></i>
+        </button>
+        {% endif %}
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td colspan="6" class="px-4 py-8 text-center text-neutral-500">
+        <i class="fas fa-lock text-2xl mb-2 block"></i>
+        No ACEs found
+    </td>
+</tr>
+{% endfor %}

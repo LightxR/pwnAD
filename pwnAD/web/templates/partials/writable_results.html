@@ -1,0 +1,53 @@
+<table class="min-w-full text-left text-sm">
+    <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+        <tr>
+            <th class="px-4 py-3 font-medium">Distinguished Name</th>
+            <th class="px-4 py-3 font-medium w-40">Permission</th>
+            <th class="px-4 py-3 font-medium w-24">OWNER</th>
+            <th class="px-4 py-3 font-medium w-24">DACL</th>
+            <th class="px-4 py-3 font-medium w-24">SACL</th>
+        </tr>
+    </thead>
+    <tbody id="writable-body" class="divide-y divide-neutral-800/50">
+        {% for r in results %}
+        <tr class="hover:bg-white/[0.02]">
+            <td class="px-4 py-2.5 text-xs text-white font-mono">
+                <a href="/object?dn={{ r.dn|urlencode }}" class="hover:text-red-400">{{ r.dn }}</a>
+            </td>
+            <td class="px-4 py-2.5 text-xs">
+                {% if r.permissions %}
+                    {% for perm in r.permissions %}
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {% if perm == 'WRITE' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">{{ perm }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-neutral-500">-</span>
+                {% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-xs">
+                {% if r.sd_rights and r.sd_rights.OWNER %}
+                    <span class="text-yellow-400">{{ r.sd_rights.OWNER }}</span>
+                {% else %}
+                    <span class="text-neutral-500">-</span>
+                {% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-xs">
+                {% if r.sd_rights and r.sd_rights.DACL %}
+                    <span class="text-yellow-400">{{ r.sd_rights.DACL }}</span>
+                {% else %}
+                    <span class="text-neutral-500">-</span>
+                {% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-xs">
+                {% if r.sd_rights and r.sd_rights.SACL %}
+                    <span class="text-yellow-400">{{ r.sd_rights.SACL }}</span>
+                {% else %}
+                    <span class="text-neutral-500">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if results|length == 0 %}
+        <tr><td colspan="5" class="px-4 py-8 text-center text-neutral-500">No writable objects found</td></tr>
+        {% endif %}
+    </tbody>
+</table>

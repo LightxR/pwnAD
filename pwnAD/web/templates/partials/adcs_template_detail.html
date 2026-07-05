@@ -1,0 +1,240 @@
+{% if error %}
+<div class="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400">
+    <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+</div>
+{% elif template %}
+<!-- Header -->
+<div class="flex items-start justify-between mb-6">
+    <div>
+        <h2 class="text-2xl font-bold text-white">{{ template.name }}</h2>
+        {% if template.display_name != template.name %}
+        <p class="text-neutral-400">{{ template.display_name }}</p>
+        {% endif %}
+        <!-- Enrollment status -->
+        <div class="mt-2 flex gap-2">
+            {% if template.can_enroll %}
+            <span class="px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                <i class="fas fa-check-circle mr-1"></i>You can enroll
+            </span>
+            {% elif template.can_write %}
+            <span class="px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                <i class="fas fa-pen mr-1"></i>You can modify (ESC4)
+            </span>
+            {% else %}
+            <span class="px-2 py-1 rounded text-xs font-medium bg-neutral-700 text-neutral-400">
+                <i class="fas fa-times-circle mr-1"></i>No enrollment rights
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <button onclick="closeTemplateDetail()" class="text-neutral-400 hover:text-white p-2 -mr-2 -mt-2">
+        <i class="fas fa-times text-xl"></i>
+    </button>
+</div>
+
+<!-- Vulnerability Alert -->
+{% if template.vulnerabilities %}
+<div class="mb-6 p-4 rounded-lg {% if template.highest_severity == 'Critical' %}bg-red-500/10 border border-red-500/50{% else %}bg-orange-500/10 border border-orange-500/50{% endif %}">
+    <h3 class="font-semibold {% if template.highest_severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %} mb-2">
+        <i class="fas fa-shield-virus mr-2"></i>
+        {{ template.vulnerabilities|length }} Vulnerabilit{% if template.vulnerabilities|length > 1 %}ies{% else %}y{% endif %} Detected
+    </h3>
+    <ul class="space-y-2">
+        {% for vuln in template.vulnerabilities %}
+        <li class="text-sm">
+            <span class="font-mono font-bold {% if vuln.severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %}">{{ vuln.id }}</span>
+            <span class="text-neutral-300"> - {{ vuln.description }}</span>
+            {% if vuln.detail %}
+            <div class="text-xs text-neutral-500 mt-1 ml-4">{{ vuln.detail }}</div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Properties Grid -->
+<div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="bg-neutral-800/50 rounded-lg p-3">
+        <div class="text-xs text-neutral-500 mb-1">Schema Version</div>
+        <div class="text-white font-medium">v{{ template.schema_version }}</div>
+    </div>
+    <div class="bg-neutral-800/50 rounded-lg p-3">
+        <div class="text-xs text-neutral-500 mb-1">Manager Approval</div>
+        <div class="{% if template.requires_manager_approval %}text-green-400{% else %}text-yellow-400{% endif %} font-medium">
+            {% if template.requires_manager_approval %}Required{% else %}Not Required{% endif %}
+        </div>
+    </div>
+    <div class="bg-neutral-800/50 rounded-lg p-3">
+        <div class="text-xs text-neutral-500 mb-1">Signatures Required</div>
+        <div class="text-white font-medium">{{ template.authorized_signatures_required }}</div>
+    </div>
+    <div class="bg-neutral-800/50 rounded-lg p-3">
+        <div class="text-xs text-neutral-500 mb-1">Client Authentication</div>
+        <div class="{% if template.client_authentication %}text-blue-400{% else %}text-neutral-400{% endif %} font-medium">
+            {% if template.client_authentication %}Enabled{% else %}Disabled{% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Certificate Name Flags -->
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-flag mr-2 text-neutral-500"></i>Certificate Name Flags
+    </h3>
+    <div class="flex flex-wrap gap-2">
+        {% set cn_flags = template.get_certificate_name_flags() %}
+        {% if cn_flags %}
+            {% for flag in cn_flags %}
+            <span class="px-2 py-1 rounded text-xs {% if 'ENROLLEE_SUPPLIES' in flag %}bg-red-500/20 text-red-400{% else %}bg-neutral-700 text-neutral-300{% endif %}">
+                {{ flag }}
+            </span>
+            {% endfor %}
+        {% else %}
+            <span class="text-neutral-500 text-sm">None</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Enrollment Flags -->
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-clipboard-check mr-2 text-neutral-500"></i>Enrollment Flags
+    </h3>
+    <div class="flex flex-wrap gap-2">
+        {% set e_flags = template.get_enrollment_flags() %}
+        {% if e_flags %}
+            {% for flag in e_flags %}
+            <span class="px-2 py-1 rounded text-xs {% if 'PEND_ALL' in flag %}bg-green-500/20 text-green-400{% elif 'NO_SECURITY' in flag %}bg-orange-500/20 text-orange-400{% else %}bg-neutral-700 text-neutral-300{% endif %}">
+                {{ flag }}
+            </span>
+            {% endfor %}
+        {% else %}
+            <span class="text-neutral-500 text-sm">None</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Extended Key Usage -->
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-key mr-2 text-neutral-500"></i>Extended Key Usage (EKU)
+    </h3>
+    <div class="flex flex-wrap gap-2">
+        {% set ekus = template.get_eku_names() %}
+        {% if ekus %}
+            {% for eku in ekus %}
+            <span class="px-2 py-1 rounded text-xs {% if 'Client' in eku or 'Smart Card' in eku %}bg-blue-500/20 text-blue-400{% elif 'Any Purpose' in eku %}bg-orange-500/20 text-orange-400{% elif 'Request Agent' in eku %}bg-purple-500/20 text-purple-400{% else %}bg-neutral-700 text-neutral-300{% endif %}">
+                {{ eku }}
+            </span>
+            {% endfor %}
+        {% else %}
+            <span class="text-neutral-500 text-sm">None (SubCA-like)</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Application Policies -->
+{% set app_policies = template.get_application_policy_names() %}
+{% if app_policies %}
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-file-shield mr-2 text-neutral-500"></i>Application Policies
+    </h3>
+    <div class="flex flex-wrap gap-2">
+        {% for policy in app_policies %}
+        <span class="px-2 py-1 rounded text-xs bg-neutral-700 text-neutral-300">
+            {{ policy }}
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Enabled on CAs -->
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-server mr-2 text-neutral-500"></i>Enabled on Certificate Authorities
+    </h3>
+    {% if template.enabled_on_cas %}
+    <div class="space-y-2">
+        {% for ca in template.enabled_on_cas %}
+        <div class="flex items-center gap-2 text-sm">
+            <i class="fas fa-check-circle text-green-400"></i>
+            <span class="text-white">{{ ca }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <span class="text-neutral-500 text-sm">Not enabled on any CA</span>
+    {% endif %}
+</div>
+
+<!-- Enrollment Permissions -->
+{% if template.enrollment_permissions %}
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-neutral-300 mb-3">
+        <i class="fas fa-users mr-2 text-neutral-500"></i>Enrollment Permissions
+    </h3>
+    <div class="bg-neutral-800/50 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-neutral-700">
+                    <th class="px-3 py-2 text-left text-neutral-400 font-medium">Principal</th>
+                    <th class="px-3 py-2 text-left text-neutral-400 font-medium">Right</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for perm in template.enrollment_permissions %}
+                <tr class="border-b border-neutral-700/50">
+                    <td class="px-3 py-2 text-white">{{ perm.principal }}</td>
+                    <td class="px-3 py-2 text-neutral-300">{{ perm.right }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dangerous Permissions (ESC4) -->
+{% if template.dangerous_permissions %}
+<div class="mb-6">
+    <h3 class="text-sm font-semibold text-orange-400 mb-3">
+        <i class="fas fa-exclamation-triangle mr-2"></i>Dangerous Permissions (ESC4)
+    </h3>
+    <div class="bg-orange-500/10 border border-orange-500/30 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-orange-500/30">
+                    <th class="px-3 py-2 text-left text-orange-300 font-medium">Principal</th>
+                    <th class="px-3 py-2 text-left text-orange-300 font-medium">Rights</th>
+                    <th class="px-3 py-2 text-left text-orange-300 font-medium">Issue</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for perm in template.dangerous_permissions %}
+                <tr class="border-b border-orange-500/20">
+                    <td class="px-3 py-2 text-white">{{ perm.principal }}</td>
+                    <td class="px-3 py-2 text-orange-300">{{ perm.right }}</td>
+                    <td class="px-3 py-2 text-neutral-400">{{ perm.issue }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- DN -->
+<div class="mt-6 pt-4 border-t border-neutral-800">
+    <div class="text-xs text-neutral-500 mb-1">Distinguished Name</div>
+    <div class="text-xs text-neutral-400 font-mono break-all">{{ template.dn }}</div>
+</div>
+
+{% else %}
+<div class="text-center text-neutral-500 py-8">
+    <i class="fas fa-file-circle-question text-4xl mb-4 block opacity-50"></i>
+    <p>Template not found</p>
+</div>
+{% endif %}

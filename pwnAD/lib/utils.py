@@ -2,14 +2,44 @@ import argparse
 import base64
 import hashlib
 import importlib
+import inspect
 import logging
 import re
 import struct
 import sys
+from typing import Any, Optional, Union
 from ldap3.core.results import RESULT_UNWILLING_TO_PERFORM, RESULT_ENTRY_ALREADY_EXISTS, RESULT_INSUFFICIENT_ACCESS_RIGHTS, RESULT_NO_SUCH_OBJECT, RESULT_CONSTRAINT_VIOLATION
+from ldap3.core.exceptions import (
+    LDAPSocketOpenError,
+    LDAPSocketReceiveError,
+    LDAPSessionTerminatedByServerError,
+)
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.certificate import hash_digest, hashes
+from pwnAD.lib.constants import (
+    WIN_ERROR_PASSWORD_POLICY,
+    WIN_ERROR_ACCOUNT_EXISTS,
+    WIN_ERROR_PASSWORD_EXPIRED,
+    WIN_ERROR_ACCOUNT_LOCKED,
+)
+
+
+class LDAPOperationError(Exception):
+    """Exception raised when an LDAP operation fails."""
+    pass
+
+
+# Exceptions that indicate the LDAP connection was lost and a rebind is needed.
+# Single source of truth, reused by the interactive shell and the web layer.
+LDAP_CONNECTION_ERRORS = (
+    LDAPSocketOpenError,
+    LDAPSocketReceiveError,
+    LDAPSessionTerminatedByServerError,
+    ConnectionResetError,
+    TimeoutError,
+    BrokenPipeError,
+)
 
 
 class Completer:
@@ -49,15 +79,13 @@ class Completer:
                         pass
                 else:
                     self.matches = []
-            else:
-                self.matches = self.completions.keys()[:]
         try:
             return self.matches[state] + " "
         except IndexError:
             return None
 
 
-def format_results(results):
+def format_results(results: dict) -> None:
     for dn in sorted(list(results.keys())):
         print(dn)
         for key, value in results[dn].items():
@@ -68,19 +96,19 @@ def format_results(results):
                 for item in value:
                     print(f"    {item}")
 
-def format_list_results(results):
+def format_list_results(results: list) -> None:
     print("\n")
     for dn in sorted(results):
         print(dn)
     print("\n")
     
-def execute_action_function(options, connection):
+def execute_action_function(options: Any, connection: Any) -> None:
     # Dynamically import the module based on the action
     module_name = f"pwnAD.commands.{options.action}"
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
-        print(f"[!] Error loading module {module_name}: {e}")
+        logging.error(f"[!] Error loading module {module_name}: {e}")
         sys.exit(1)
 
     try:
@@ -92,38 +120,43 @@ def execute_action_function(options, connection):
                 function_to_call = getattr(module, "query")
             else:
                 function_to_call = getattr(module, options.function)
-            function_args = {k: v for k, v in vars(options).items() if v is not None and k in function_to_call.__code__.co_varnames}
+            valid_params = set(inspect.signature(function_to_call).parameters)
+            function_args = {k: v for k, v in vars(options).items() if v is not None and k in valid_params}
             function_to_call(connection, **function_args)
 
     except AttributeError as e:
-        print(e)
+        logging.error(e)
         sys.exit(1)
 
-def check_error(conn, error_code, e):
+def check_error(conn: Any, error_code: int, e: Exception) -> None:
+    error_msg = None
     if error_code == RESULT_ENTRY_ALREADY_EXISTS:
-        logging.error("Entry already exists")
+        error_msg = "Entry already exists"
     elif error_code == RESULT_INSUFFICIENT_ACCESS_RIGHTS:
-        logging.error(f"User '{conn.user}' lacks permissions for this operation")
+        error_msg = f"User '{conn.user}' lacks permissions for this operation"
     elif error_code == RESULT_UNWILLING_TO_PERFORM:
         # Parse Windows error codes from LDAP message for more specific errors
         error_str = str(e)
-        if "0000052D" in error_str:
-            logging.error("Password does not meet the domain password policy requirements")
-        elif "00000524" in error_str:
-            logging.error("Account already exists")
-        elif "00000532" in error_str:
-            logging.error("Password expired")
-        elif "00000775" in error_str:
-            logging.error("Account is locked out")
+        if WIN_ERROR_PASSWORD_POLICY in error_str:
+            error_msg = "Password does not meet the domain password policy requirements"
+        elif WIN_ERROR_ACCOUNT_EXISTS in error_str:
+            error_msg = "Account already exists"
+        elif WIN_ERROR_PASSWORD_EXPIRED in error_str:
+            error_msg = "Password expired"
+        elif WIN_ERROR_ACCOUNT_LOCKED in error_str:
+            error_msg = "Account is locked out"
         else:
-            logging.error(f"Server refused the operation (possible causes: insufficient permissions, policy violation, no secure connection)")
+            error_msg = "Server refused the operation (possible causes: insufficient permissions, policy violation, no secure connection)"
             logging.debug(f"LDAP error details: {e}")
     elif error_code == RESULT_CONSTRAINT_VIOLATION:
-        logging.error(f"Constraint violation: {e}")
+        error_msg = f"Constraint violation: {e}"
     else:
-        logging.error(f"Unexpected error: {e}")
+        error_msg = f"Unexpected error: {e}"
 
-def parse_lm_nt_hashes(lm_nt_hashes_string):
+    logging.debug(f"LDAP operation failed: {error_msg}")
+    raise LDAPOperationError(error_msg)
+
+def parse_lm_nt_hashes(lm_nt_hashes_string: Optional[str]) -> tuple[str, str]:
     lm_hash_value = "aad3b435b51404eeaad3b435b51404ee"
     nt_hash_value = "31d6cfe0d16ae931b73c59d7e0c089c0"
     
@@ -142,7 +175,7 @@ def parse_lm_nt_hashes(lm_nt_hashes_string):
 
     return lm_hash_value, nt_hash_value
 
-def nt_hash(data):
+def nt_hash(data: Union[str, bytes]) -> str:
     if isinstance(data, str):
         data = bytes(data, 'utf-16-le')
 

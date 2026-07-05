@@ -8,7 +8,7 @@ import sys
 import pwnAD.lib.parser as parser
 from pwnAD.lib.auth import Authenticate
 from pwnAD.lib.ldap import LDAPConnection, LDAPAuthenticationError
-from pwnAD.lib.utils import execute_action_function, Completer
+from pwnAD.lib.utils import execute_action_function, Completer, LDAPOperationError, LDAP_CONNECTION_ERRORS
 from pwnAD.lib.version import BANNER
 
 
@@ -26,7 +26,7 @@ def infos(conn):
     logging.info(f"key: \t{True if (conn.key and not conn.pfx) else None}")
     logging.info(f"cert: \t{True if (conn.cert and not conn.pfx) else None}")
     logging.info(f"kerberos: \t{conn.use_kerberos}")
-    logging.info(f"TLS: \t{True if conn._do_tls is not None else False}")
+    logging.info(f"TLS: \t{bool(conn._do_tls)}")
 
 
 def start_interactive_mode(conn):
@@ -52,9 +52,9 @@ def start_interactive_mode(conn):
                 continue
 
             if user_input.startswith('!'):
-                command_to_run = user_input[1:]
+                command_to_run = user_input[1:].strip()
                 try:
-                    subprocess.run(command_to_run, shell=True, check=False)
+                    subprocess.run(shlex.split(command_to_run), check=False)
                 except Exception as e:
                     logging.error(f"Command execution failed: {e}")
                 continue
@@ -65,47 +65,17 @@ def start_interactive_mode(conn):
 
             if command == "exit":
                 print("See you soon !")
-                sys.exit(1)
+                sys.exit(0)
             
             elif command == "start_tls":
                 conn.start_tls()
                 continue
 
             elif command == "rebind":
-                backup_conn = conn
-                try:
-                    if conn._ldap_connection.bound:
-                        logging.debug("Connection already bound")
-                        conn._ldap_connection.unbind()
-                    conn._ldap_connection.bind()
+                if conn.rebind():
                     logging.info("Successfully performed a connection rebind.")
-
-                except Exception as e:
-                    try:
-                        logging.debug("Simple rebind failed, launching a new connection with the current user and options")
-                        new_conn = LDAPConnection(
-                            target=conn.target,
-                            domain=conn.domain,
-                            ldap_user=conn.ldap_user,
-                            ldap_pass=conn.ldap_pass,
-                            lmhash=conn.lmhash,
-                            nthash=conn.nthash,
-                            aesKey=conn.aesKey,
-                            pfx=conn.pfx,
-                            pfx_pass=conn.pfx_pass,
-                            key=conn.key,
-                            cert=conn.cert,
-                            use_kerberos=conn.use_kerberos,
-                            kdcHost=conn.kdcHost,
-                            _do_tls=conn._do_tls,
-                            port=conn.port
-                        )
-                        new_conn.connect()
-                        conn = new_conn
-                        logging.info("Successfully performed a connection rebind.")
-                    except (LDAPAuthenticationError, Exception) as rebind_error:
-                        logging.error(f"An error occurred when trying to rebind connection: {rebind_error}")
-                        conn = backup_conn
+                else:
+                    logging.error("Failed to rebind connection.")
                 continue
 
             elif command == "switch_user":
@@ -261,13 +231,23 @@ def start_interactive_mode(conn):
                     continue  
             except KeyboardInterrupt as e:
                 print("\nSee you soon!")
-                sys.exit(1) 
-            
+                sys.exit(0)
+
             print("\nSee you soon!")
-            sys.exit(1)  
+            sys.exit(0)
+
+        except LDAPOperationError as e:
+            # Expected operational failure — check_error already built a
+            # user-friendly message, so surface it as-is without extra noise.
+            logging.error(str(e))
+
+        except LDAP_CONNECTION_ERRORS as e:
+            logging.error(f"Connection lost: {e}")
+            logging.error("Run 'rebind' to reconnect, then retry your command.")
 
         except Exception as e:
-            logging.error(f"An error has occured : {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug("Full traceback:", exc_info=True)
             
 
 

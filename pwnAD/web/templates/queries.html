@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Builtin Queries{% endblock %}
+{% block content %}
+<div class="flex h-full">
+    <!-- Filters Sidebar -->
+    <div class="w-64 shrink-0 border-r border-neutral-800 bg-neutral-900/50 p-4 overflow-y-auto scrollbar">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-white">Filters</h3>
+            {% if active_filters %}
+            <button onclick="clearFilters()" class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-neutral-800 text-neutral-400 hover:bg-red-500/20 hover:text-red-400 transition">
+                <i class="fas fa-times text-[10px]"></i> Clear
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Search -->
+        <div class="mb-5">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-xs"></i>
+                <input type="text" id="search-input" placeholder="Search by name..."
+                    class="w-full bg-neutral-800 border border-neutral-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+                    value="{{ search or '' }}" onkeyup="debounceSearch(this.value)">
+            </div>
+        </div>
+
+        <!-- Object Types -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Object Types</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('users')" id="filter-users"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'users' in active_filters %}bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-user w-4 text-center"></i> Users
+                </button>
+                <button onclick="toggleFilter('computers')" id="filter-computers"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'computers' in active_filters %}bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-desktop w-4 text-center"></i> Computers
+                </button>
+                <button onclick="toggleFilter('groups')" id="filter-groups"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'groups' in active_filters %}bg-green-500/20 text-green-400 ring-1 ring-green-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-users w-4 text-center"></i> Groups
+                </button>
+            </div>
+        </div>
+
+        <!-- Kerberos -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Kerberos</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('kerberoastables')" id="filter-kerberoastables"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'kerberoastables' in active_filters %}bg-orange-500/20 text-orange-400 ring-1 ring-orange-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-fire w-4 text-center"></i> Kerberoastable
+                </button>
+                <button onclick="toggleFilter('asreproastables')" id="filter-asreproastables"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'asreproastables' in active_filters %}bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-bolt w-4 text-center"></i> AS-REP Roastable
+                </button>
+            </div>
+        </div>
+
+        <!-- Delegation -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Delegation</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('unconstrained')" id="filter-unconstrained"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'unconstrained' in active_filters %}bg-red-500/20 text-red-400 ring-1 ring-red-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-unlock w-4 text-center"></i> Unconstrained
+                </button>
+                <button onclick="toggleFilter('constrained')" id="filter-constrained"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'constrained' in active_filters %}bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-link w-4 text-center"></i> Constrained
+                </button>
+                <button onclick="toggleFilter('rbcd')" id="filter-rbcd"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'rbcd' in active_filters %}bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-arrows-turn-to-dots w-4 text-center"></i> RBCD
+                </button>
+            </div>
+        </div>
+
+        <!-- Privileges -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Privileges</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('admin_count')" id="filter-admin_count"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'admin_count' in active_filters %}bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-shield-halved w-4 text-center"></i> AdminCount
+                </button>
+                <button onclick="toggleFilter('protected_users')" id="filter-protected_users"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'protected_users' in active_filters %}bg-green-500/20 text-green-400 ring-1 ring-green-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-user-shield w-4 text-center"></i> Protected Users
+                </button>
+            </div>
+        </div>
+
+        <!-- Resources -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Resources</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('laps')" id="filter-laps"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'laps' in active_filters %}bg-green-500/20 text-green-400 ring-1 ring-green-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-key w-4 text-center"></i> LAPS
+                </button>
+                <button onclick="toggleFilter('gmsa')" id="filter-gmsa"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'gmsa' in active_filters %}bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-robot w-4 text-center"></i> gMSA
+                </button>
+            </div>
+        </div>
+
+        <!-- Recycle Bin -->
+        <div class="mb-5">
+            <span class="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">Recycle Bin</span>
+            <div class="flex flex-col gap-1.5">
+                <button onclick="toggleFilter('deleted')" id="filter-deleted"
+                    class="filter-btn flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition w-full text-left {% if 'deleted' in active_filters %}bg-red-500/20 text-red-400 ring-1 ring-red-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %}">
+                    <i class="fas fa-trash-can w-4 text-center"></i> Deleted Objects
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden">
+        <!-- Header -->
+        <div class="shrink-0 border-b border-neutral-800 bg-neutral-900/50 p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-semibold text-white">Builtin Queries</h2>
+                    <span class="text-sm text-neutral-500">({{ results|length }} results)</span>
+                </div>
+                {% if can_read_passwords and (laps_readable or gmsa_readable) %}
+                <button onclick="showPasswordsModal()" class="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition text-sm font-medium">
+                    <i class="fas fa-key"></i> View Readable Passwords
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="flex-1 p-6 overflow-y-auto scrollbar">
+            {% if error %}
+            <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400 mb-4">
+                <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+            </div>
+            {% endif %}
+
+            {% if results %}
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+                <table class="min-w-full text-left text-sm">
+                    <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                        <tr>
+                            <th class="px-4 py-3 font-medium">Name</th>
+                            <th class="px-4 py-3 font-medium">Type</th>
+                            <th class="px-4 py-3 font-medium">Tags</th>
+                            {% if 'kerberoastables' in active_filters %}
+                            <th class="px-4 py-3 font-medium">SPN</th>
+                            {% endif %}
+                            {% if 'constrained' in active_filters %}
+                            <th class="px-4 py-3 font-medium">Allowed To</th>
+                            {% endif %}
+                            {% if 'laps' in active_filters %}
+                            <th class="px-4 py-3 font-medium">LAPS Status</th>
+                            {% endif %}
+                            {% if 'gmsa' in active_filters %}
+                            <th class="px-4 py-3 font-medium">gMSA Status</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-neutral-800/50" id="results-body">
+                        {% for obj in results %}
+                        <tr class="hover:bg-white/[0.02] transition clickable-row {% if obj.is_deleted %}bg-red-900/20 opacity-80{% elif obj.is_current_user %}bg-red-500/10{% endif %}"
+                            onclick="window.location='/object?dn={{ obj.dn|urlencode }}'">
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    {% if obj.is_current_user %}
+                                    <span class="text-red-400" title="Current LDAP session account">
+                                        <i class="fas fa-star"></i>
+                                    </span>
+                                    {% endif %}
+                                    <div>
+                                        <div class="font-medium {% if obj.is_current_user %}text-red-400{% else %}text-white{% endif %}">{{ obj.sam or obj.name or 'N/A' }}</div>
+                                        <div class="text-xs text-neutral-500 truncate max-w-md">{{ obj.dn }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-neutral-400">
+                                {% if obj.type == 'user' %}
+                                <span class="text-blue-400"><i class="fas fa-user mr-1"></i>User</span>
+                                {% elif obj.type == 'computer' %}
+                                <span class="text-purple-400"><i class="fas fa-desktop mr-1"></i>Computer</span>
+                                {% elif obj.type == 'group' %}
+                                <span class="text-green-400"><i class="fas fa-users mr-1"></i>Group</span>
+                                {% elif obj.type == 'gmsa' %}
+                                <span class="text-cyan-400"><i class="fas fa-robot mr-1"></i>gMSA</span>
+                                {% else %}
+                                <span class="text-neutral-400">{{ obj.type or 'Object' }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-1">
+                                    {% if obj.tags %}
+                                        {% for tag in obj.tags %}
+                                        <span class="px-2 py-0.5 rounded text-xs font-medium
+                                            {% if tag == 'Deleted' %}bg-red-600/30 text-red-300 ring-1 ring-red-500/50
+                                            {% elif tag == 'Kerberoastable' %}bg-orange-500/20 text-orange-400
+                                            {% elif tag == 'AS-REP' %}bg-yellow-500/20 text-yellow-400
+                                            {% elif tag == 'Unconstrained' %}bg-red-500/20 text-red-400
+                                            {% elif tag == 'Constrained' %}bg-blue-500/20 text-blue-400
+                                            {% elif tag == 'RBCD' %}bg-purple-500/20 text-purple-400
+                                            {% elif tag == 'AdminCount' %}bg-amber-500/20 text-amber-400
+                                            {% elif tag == 'Protected' %}bg-green-500/20 text-green-400
+                                            {% elif tag == 'LAPS' %}bg-green-500/20 text-green-400
+                                            {% elif tag == 'gMSA' %}bg-blue-500/20 text-blue-400
+                                            {% else %}bg-neutral-700 text-neutral-300{% endif %}">
+                                            {% if tag == 'Deleted' %}<i class="fas fa-trash-can mr-1"></i>{% endif %}{{ tag }}
+                                        </span>
+                                        {% endfor %}
+                                    {% else %}
+                                    <span class="text-neutral-600">-</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            {% if 'kerberoastables' in active_filters %}
+                            <td class="px-4 py-3 text-xs text-neutral-400 font-mono">
+                                {% if obj.spn is iterable and obj.spn is not string %}
+                                    {{ obj.spn[0] }}{% if obj.spn|length > 1 %} <span class="text-neutral-600">+{{ obj.spn|length - 1 }}</span>{% endif %}
+                                {% else %}
+                                    {{ obj.spn or '-' }}
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% if 'constrained' in active_filters %}
+                            <td class="px-4 py-3 text-xs text-neutral-400 font-mono">
+                                {% if obj.allowed_to is iterable and obj.allowed_to is not string %}
+                                    {{ obj.allowed_to[0] }}{% if obj.allowed_to|length > 1 %} <span class="text-neutral-600">+{{ obj.allowed_to|length - 1 }}</span>{% endif %}
+                                {% else %}
+                                    {{ obj.allowed_to or '-' }}
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% if 'laps' in active_filters %}
+                            <td class="px-4 py-3">
+                                {% if obj.has_laps %}
+                                    {% if obj.can_read_laps %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                                        <i class="fas fa-check"></i> Readable
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-neutral-700 text-neutral-400">
+                                        <i class="fas fa-lock"></i> Configured
+                                    </span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-neutral-600">-</span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% if 'gmsa' in active_filters %}
+                            <td class="px-4 py-3">
+                                {% if obj.type == 'gmsa' %}
+                                    {% if obj.can_read_gmsa %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                                        <i class="fas fa-check"></i> Readable
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-neutral-700 text-neutral-400">
+                                        <i class="fas fa-robot"></i> gMSA Account
+                                    </span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-neutral-600">-</span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="flex items-center justify-center h-64 text-neutral-500">
+                <div class="text-center">
+                    <i class="fas fa-database text-4xl mb-3 opacity-30"></i>
+                    <p>No objects found matching the current filters</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Passwords Modal -->
+<div id="passwords-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+    <div class="bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i class="fas fa-key text-green-400"></i>
+                Readable Passwords
+            </h3>
+            <button onclick="hidePasswordsModal()" class="text-neutral-400 hover:text-white transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[60vh] scrollbar" id="passwords-content">
+            <div class="text-center text-neutral-500 py-8">
+                <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
+                <p>Loading passwords...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Current filter state
+    let activeFilters = {{ active_filters|tojson|safe }};
+    let searchTimeout = null;
+
+    function toggleFilter(filter) {
+        const idx = activeFilters.indexOf(filter);
+        if (idx > -1) {
+            activeFilters.splice(idx, 1);
+        } else {
+            activeFilters.push(filter);
+        }
+        applyFilters();
+    }
+
+    function clearFilters() {
+        activeFilters = [];
+        document.getElementById('search-input').value = '';
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const search = document.getElementById('search-input').value;
+        const params = new URLSearchParams();
+        if (activeFilters.length > 0) {
+            params.set('filters', activeFilters.join(','));
+        }
+        if (search) {
+            params.set('search', search);
+        }
+        window.location.href = '/queries' + (params.toString() ? '?' + params.toString() : '');
+    }
+
+    function debounceSearch(value) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            applyFilters();
+        }, 500);
+    }
+
+    function showPasswordsModal() {
+        const modal = document.getElementById('passwords-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        // Fetch passwords
+        fetch('/api/readable-passwords?' + new URLSearchParams({filters: activeFilters.join(',')}))
+            .then(r => r.json())
+            .then(data => {
+                const content = document.getElementById('passwords-content');
+                if (data.error) {
+                    content.innerHTML = `<div class="text-red-400 text-center py-8"><i class="fas fa-exclamation-triangle mr-2"></i>${data.error}</div>`;
+                    return;
+                }
+
+                let html = '';
+
+                if (data.laps && data.laps.length > 0) {
+                    html += `<div class="mb-6">
+                        <h4 class="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i class="fas fa-key text-green-400"></i> LAPS Passwords
+                        </h4>
+                        <div class="space-y-2">`;
+                    for (const item of data.laps) {
+                        html += `<div class="flex items-center justify-between bg-neutral-800 rounded-lg px-4 py-3">
+                            <div>
+                                <div class="font-medium text-white">${item.name}</div>
+                                <div class="text-xs text-neutral-500">${item.dn}</div>
+                            </div>
+                            <code class="bg-green-500/20 text-green-400 px-3 py-1.5 rounded font-mono text-sm select-all">${item.password}</code>
+                        </div>`;
+                    }
+                    html += '</div></div>';
+                }
+
+                if (data.gmsa && data.gmsa.length > 0) {
+                    html += `<div class="mb-6">
+                        <h4 class="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i class="fas fa-robot text-blue-400"></i> gMSA Accounts
+                        </h4>
+                        <div class="space-y-2">`;
+                    for (const item of data.gmsa) {
+                        html += `<div class="flex items-center justify-between bg-neutral-800 rounded-lg px-4 py-3">
+                            <div>
+                                <div class="font-medium text-white">${item.name}</div>
+                                <div class="text-xs text-neutral-500">${item.dn}</div>
+                            </div>
+                            ${item.password ?
+                                `<code class="bg-blue-500/20 text-blue-400 px-3 py-1.5 rounded font-mono text-sm select-all">${item.password}</code>` :
+                                `<span class="text-neutral-500 text-sm">Requires TLS</span>`
+                            }
+                        </div>`;
+                    }
+                    html += '</div></div>';
+                }
+
+                if (!html) {
+                    html = '<div class="text-neutral-500 text-center py-8">No readable passwords found</div>';
+                }
+
+                content.innerHTML = html;
+            })
+            .catch(err => {
+                document.getElementById('passwords-content').innerHTML =
+                    `<div class="text-red-400 text-center py-8"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading passwords</div>`;
+            });
+    }
+
+    function hidePasswordsModal() {
+        const modal = document.getElementById('passwords-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('passwords-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            hidePasswordsModal();
+        }
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hidePasswordsModal();
+        }
+    });
+</script>
+{% endblock %}
