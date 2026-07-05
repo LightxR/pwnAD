@@ -119,7 +119,12 @@ def dacl_view():
                 try:
                     _, principal_sid = _resolve_principal(conn, principal)
                 except Exception:
-                    pass
+                    principal_sid = None
+                if not principal_sid:
+                    ctx['aces'] = []
+                    ctx['ace_count'] = 0
+                    ctx['error'] = f'Could not resolve principal: {principal}'
+                    return render_template('dacl_view.html', **ctx)
             ctx['aces'] = _parse_aces(conn, sd, principal_sid)
             ctx['ace_count'] = len(sd['Dacl'].aces) if sd['Dacl'] else 0
         else:

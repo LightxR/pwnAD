@@ -2,21 +2,9 @@
 import logging
 
 import ldap3
-from ldap3.core.exceptions import (
-    LDAPSocketOpenError,
-    LDAPSocketReceiveError,
-    LDAPSessionTerminatedByServerError,
-)
 
-# Exceptions that indicate a connection loss
-LDAP_CONNECTION_ERRORS = (
-    LDAPSocketOpenError,
-    LDAPSocketReceiveError,
-    LDAPSessionTerminatedByServerError,
-    ConnectionResetError,
-    TimeoutError,
-    BrokenPipeError,
-)
+# Re-exported for the route modules (single source of truth in lib.utils).
+from pwnAD.lib.utils import LDAP_CONNECTION_ERRORS
 
 
 def ldap_search_with_retry(conn, search_base, search_filter, attributes,

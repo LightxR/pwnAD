@@ -92,10 +92,10 @@ def dcsync(conn, trustee):
     targetDN, targetSID = conn.ldap_get_user(trustee)
     logging.debug(f"targetSID : {targetSID}")
 
-    res = conn.search(search_base=conn._baseDN,
-                      search_filter=f'(distinguishedName={conn._baseDN})',
-                      attributes=['nTSecurityDescriptor'])
-    if res is None:
+    conn.search(search_base=conn._baseDN,
+                search_filter=f'(distinguishedName={conn._baseDN})',
+                attributes=['nTSecurityDescriptor'])
+    if not conn._ldap_connection.entries:
         raise LDAPOperationError('Failed to get forest\'s SD')
 
     baseDN_sd = conn._ldap_connection.entries[0].entry_raw_attributes
@@ -138,12 +138,12 @@ def genericAll(conn, target, trustee):
     _, trustee_sid = conn.ldap_get_user(trustee)
     target_dn, _ = conn.ldap_get_user(target)
 
-    res = conn.search(
+    conn.search(
         search_base=target_dn,
         search_filter=f'(distinguishedName={target_dn})',
         attributes=['nTSecurityDescriptor']
     )
-    if res is None:
+    if not conn._ldap_connection.entries:
         raise LDAPOperationError("Failed to get target's SD")
 
     target_sd = conn._ldap_connection.entries[0].entry_raw_attributes

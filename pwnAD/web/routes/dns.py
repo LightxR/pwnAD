@@ -141,10 +141,14 @@ def dns_record_add():
     name = request.form.get('name', '').strip()
     dnstype = request.form.get('type', 'A').strip()
     data = request.form.get('data', '').strip()
-    ttl = int(request.form.get('ttl', '300'))
 
     if not zone or not name or not data:
         return jsonify(success=False, message='Missing required fields'), 400
+
+    try:
+        ttl = int(request.form.get('ttl', '300') or '300')
+    except ValueError:
+        return jsonify(success=False, message='Invalid TTL'), 400
 
     try:
         from pwnAD.commands.add import dnsRecord

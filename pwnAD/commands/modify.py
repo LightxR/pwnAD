@@ -63,7 +63,7 @@ def owner(conn, target: str, new_owner: str):
         new_owner_SID = format_sid(conn._ldap_connection.entries[0]['objectSid'].raw_values[0])
         logging.debug(f"Found new owner SID: {new_owner_SID}")
     except IndexError:
-        logging.error(f'New owner SID not found in LDAP ({target})')
+        logging.error(f'New owner SID not found in LDAP ({new_owner})')
         return
 
     current_owner_SID = format_sid(target_principal_security_descriptor['OwnerSid']).formatCanonical()
@@ -102,11 +102,12 @@ def computer_name(conn, current_name, new_name):
         new_name: New sAMAccountName
     """
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(current_name), attributes=['objectSid', 'sAMAccountName'])
-    computer_dn = conn._ldap_connection.entries[0].entry_dn
-    if not computer_dn:
-        return f"Computer not found in LDAP: {current_name}"
+    if len(conn._ldap_connection.entries) != 1:
+        logging.error(f"Computer not found in LDAP: {current_name}")
+        return
 
     entry = conn._ldap_connection.entries[0]
+    computer_dn = entry.entry_dn
     sam_account_name = entry["samAccountName"].value
     logging.info(f"Original sAMAccountName: {sam_account_name}")
 
@@ -132,11 +133,12 @@ def dontreqpreauth(conn, account, flag):
     dont_req_preauth = ACCOUNT_FLAGS["DONT_REQ_PREAUTH"]
 
     conn.search(conn._baseDN, '(sAMAccountName=%s)' % escape_filter_chars(account), attributes=['objectSid', 'userAccountControl'])
-    user_dn = conn._ldap_connection.entries[0].entry_dn
-    if not user_dn:
-        return f"User not found in LDAP: {account}"
+    if len(conn._ldap_connection.entries) != 1:
+        logging.error(f"User not found in LDAP: {account}")
+        return
 
     entry = conn._ldap_connection.entries[0]
+    user_dn = entry.entry_dn
     uac = entry["userAccountControl"].value
     logging.info(f"Original userAccountControl: {uac}")
 

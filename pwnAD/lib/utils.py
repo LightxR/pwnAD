@@ -9,6 +9,11 @@ import struct
 import sys
 from typing import Any, Optional, Union
 from ldap3.core.results import RESULT_UNWILLING_TO_PERFORM, RESULT_ENTRY_ALREADY_EXISTS, RESULT_INSUFFICIENT_ACCESS_RIGHTS, RESULT_NO_SUCH_OBJECT, RESULT_CONSTRAINT_VIOLATION
+from ldap3.core.exceptions import (
+    LDAPSocketOpenError,
+    LDAPSocketReceiveError,
+    LDAPSessionTerminatedByServerError,
+)
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.certificate import hash_digest, hashes
@@ -23,6 +28,18 @@ from pwnAD.lib.constants import (
 class LDAPOperationError(Exception):
     """Exception raised when an LDAP operation fails."""
     pass
+
+
+# Exceptions that indicate the LDAP connection was lost and a rebind is needed.
+# Single source of truth, reused by the interactive shell and the web layer.
+LDAP_CONNECTION_ERRORS = (
+    LDAPSocketOpenError,
+    LDAPSocketReceiveError,
+    LDAPSessionTerminatedByServerError,
+    ConnectionResetError,
+    TimeoutError,
+    BrokenPipeError,
+)
 
 
 class Completer:

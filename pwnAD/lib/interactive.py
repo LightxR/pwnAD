@@ -8,7 +8,7 @@ import sys
 import pwnAD.lib.parser as parser
 from pwnAD.lib.auth import Authenticate
 from pwnAD.lib.ldap import LDAPConnection, LDAPAuthenticationError
-from pwnAD.lib.utils import execute_action_function, Completer
+from pwnAD.lib.utils import execute_action_function, Completer, LDAPOperationError, LDAP_CONNECTION_ERRORS
 from pwnAD.lib.version import BANNER
 
 
@@ -236,8 +236,18 @@ def start_interactive_mode(conn):
             print("\nSee you soon!")
             sys.exit(0)
 
+        except LDAPOperationError as e:
+            # Expected operational failure — check_error already built a
+            # user-friendly message, so surface it as-is without extra noise.
+            logging.error(str(e))
+
+        except LDAP_CONNECTION_ERRORS as e:
+            logging.error(f"Connection lost: {e}")
+            logging.error("Run 'rebind' to reconnect, then retry your command.")
+
         except Exception as e:
-            logging.error(f"An error has occured : {e}")
+            logging.error(f"Unexpected error: {e}")
+            logging.debug("Full traceback:", exc_info=True)
             
 
 

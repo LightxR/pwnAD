@@ -12,10 +12,12 @@ class PwnADHelpFormatter(argparse.RawDescriptionHelpFormatter):
         super().__init__(prog, indent_increment, max_help_position, width)
 
     def _metavar_formatter(self, action, default_metavar):
-        # Suppress subparsers choices display in usage line
+        # Suppress subparsers choices display in usage line.
+        # argparse unpacks the result as a tuple (e.g. `metavar, = fmt(1)`),
+        # so this must always return a tuple, never a bare string.
         if isinstance(action, argparse._SubParsersAction):
             def format(tuple_size):
-                return '<command>' if tuple_size == 1 else ('<command>',) * tuple_size
+                return ('<command>',) * tuple_size
             return format
         return super()._metavar_formatter(action, default_metavar)
 
