@@ -46,7 +46,10 @@ def getNThash(auth, is_key_credential=False):
     """
     if not (auth.cert and auth.key):
         return logging.error("getNThash function needs certificate authentication")
-    as_rep, cipher, session_key, t_key = getTGT(auth)
+    result = getTGT(auth)
+    if result is False:
+        return False
+    as_rep, cipher, session_key, t_key = result
     logging.info(f"Trying to retrieve NT hash for {auth.username}")
 
     # Try to extract NT hash via U2U

