@@ -173,28 +173,6 @@ def _ensure_connected(conn):
             raise LDAPSocketOpenError("Failed to rebind LDAP connection")
 
 
-def _ldap_search_single(conn, search_base, search_filter, attributes, search_scope=ldap3.BASE, _retry=True):
-    """Execute a single LDAP search with auto-rebind on connection loss.
-
-    Used for non-paged searches (e.g., fetching a single object by DN).
-    """
-    try:
-        conn._ldap_connection.search(
-            search_base=search_base,
-            search_filter=search_filter,
-            search_scope=search_scope,
-            attributes=attributes,
-        )
-        return conn._ldap_connection.response, conn._ldap_connection.result
-
-    except LDAP_CONNECTION_ERRORS as e:
-        if _retry:
-            logging.warning(f"[*] LDAP connection error: {e}, attempting rebind...")
-            if conn.rebind():
-                return _ldap_search_single(conn, search_base, search_filter, attributes, search_scope, _retry=False)
-        raise
-
-
 def _ldap_search(conn, search_filter, attributes, search_base=None, size_limit=0, _retry=True, controls=None):
     """Execute an LDAP search and return list of result dicts.
 
@@ -489,7 +467,7 @@ def object_detail():
             )
             response = conn._ldap_connection.response
         else:
-            response, _ = _ldap_search_single(conn, dn, '(objectClass=*)', ['*'], ldap3.BASE)
+            response, _ = ldap_search_with_retry(conn, dn, '(objectClass=*)', ['*'], ldap3.BASE)
 
         results = []
         for entry in response:
@@ -978,93 +956,92 @@ def writable_view():
     ctx['partition'] = request.args.get('partition', 'DOMAIN').strip()
     ctx['results'] = None
 
-    # Always run search by default
-    if True:
-        try:
-            otype = ctx['otype']
-            right = ctx['right']
-            partition = ctx['partition']
+    # Always run the writable search on load
+    try:
+        otype = ctx['otype']
+        right = ctx['right']
+        partition = ctx['partition']
 
-            if otype == 'useronly':
-                ldap_filter = '(sAMAccountType=805306368)'
-            elif otype == 'ou':
-                ldap_filter = '(|(objectClass=container)(objectClass=organizationalUnit))'
-            elif otype == 'gpo':
-                ldap_filter = '(objectClass=groupPolicyContainer)'
-            else:
-                ldap_filter = f'(objectClass={otype})'
+        if otype == 'useronly':
+            ldap_filter = '(sAMAccountType=805306368)'
+        elif otype == 'ou':
+            ldap_filter = '(|(objectClass=container)(objectClass=organizationalUnit))'
+        elif otype == 'gpo':
+            ldap_filter = '(objectClass=groupPolicyContainer)'
+        else:
+            ldap_filter = f'(objectClass={escape_filter_chars(otype)})'
 
-            search_bases = []
-            if partition == 'DOMAIN':
-                search_bases.append(conn._baseDN)
-            elif partition == 'CONFIGURATION':
-                search_bases.append(conn.configuration_path)
-            elif partition == 'SCHEMA':
-                search_bases.append(f'CN=Schema,{conn.configuration_path}')
-            elif partition == 'DNS':
-                search_bases.extend([
-                    f'DC=DomainDnsZones,{conn._baseDN}',
-                    f'DC=ForestDnsZones,{conn._baseDN}'
-                ])
-            elif partition == 'ALL':
-                search_bases.extend([
-                    conn._baseDN,
-                    conn.configuration_path,
-                    f'CN=Schema,{conn.configuration_path}',
-                    f'DC=DomainDnsZones,{conn._baseDN}',
-                    f'DC=ForestDnsZones,{conn._baseDN}'
-                ])
+        search_bases = []
+        if partition == 'DOMAIN':
+            search_bases.append(conn._baseDN)
+        elif partition == 'CONFIGURATION':
+            search_bases.append(conn.configuration_path)
+        elif partition == 'SCHEMA':
+            search_bases.append(f'CN=Schema,{conn.configuration_path}')
+        elif partition == 'DNS':
+            search_bases.extend([
+                f'DC=DomainDnsZones,{conn._baseDN}',
+                f'DC=ForestDnsZones,{conn._baseDN}'
+            ])
+        elif partition == 'ALL':
+            search_bases.extend([
+                conn._baseDN,
+                conn.configuration_path,
+                f'CN=Schema,{conn.configuration_path}',
+                f'DC=DomainDnsZones,{conn._baseDN}',
+                f'DC=ForestDnsZones,{conn._baseDN}'
+            ])
 
-            all_results = []
+        all_results = []
 
-            # Computed-attributes mode for current user
-            attributes = ['distinguishedName']
-            if right in ('WRITE', 'ALL'):
-                attributes.extend(['allowedAttributesEffective', 'sDRightsEffective'])
-            if right in ('CHILD', 'ALL'):
-                attributes.append('allowedChildClassesEffective')
+        # Computed-attributes mode for current user
+        attributes = ['distinguishedName']
+        if right in ('WRITE', 'ALL'):
+            attributes.extend(['allowedAttributesEffective', 'sDRightsEffective'])
+        if right in ('CHILD', 'ALL'):
+            attributes.append('allowedChildClassesEffective')
 
-            for base in search_bases:
-                results = _ldap_search(conn, ldap_filter, attributes, search_base=base)
-                for r in results:
-                    attrs = r['attributes']
-                    permissions = []
-                    sd_rights = {}
+        for base in search_bases:
+            results = _ldap_search(conn, ldap_filter, attributes, search_base=base)
+            for r in results:
+                attrs = r['attributes']
+                permissions = []
+                sd_rights = {}
 
-                    # Check write permissions
-                    has_write = bool(attrs.get('allowedAttributesEffective'))
-                    if has_write and right in ('WRITE', 'ALL'):
-                        permissions.append('WRITE')
+                # Check write permissions
+                has_write = bool(attrs.get('allowedAttributesEffective'))
+                if has_write and right in ('WRITE', 'ALL'):
+                    permissions.append('WRITE')
 
-                    # Check child creation permissions
-                    has_child = bool(attrs.get('allowedChildClassesEffective'))
-                    if has_child and right in ('CHILD', 'ALL'):
-                        permissions.append('CREATE_CHILD')
+                # Check child creation permissions
+                has_child = bool(attrs.get('allowedChildClassesEffective'))
+                if has_child and right in ('CHILD', 'ALL'):
+                    permissions.append('CREATE_CHILD')
 
-                    # Parse sDRightsEffective for OWNER/DACL/SACL write permissions
-                    sd_rights_value = attrs.get('sDRightsEffective')
-                    if sd_rights_value:
-                        try:
-                            value = int(sd_rights_value)
-                            if value & 0x01:
-                                sd_rights['OWNER'] = 'WRITE'
-                            if value & 0x04:
-                                sd_rights['DACL'] = 'WRITE'
-                            if value & 0x08:
-                                sd_rights['SACL'] = 'WRITE'
-                        except (ValueError, TypeError):
-                            pass
+                # Parse sDRightsEffective for OWNER/DACL/SACL write permissions
+                sd_rights_value = attrs.get('sDRightsEffective')
+                if sd_rights_value:
+                    try:
+                        value = int(sd_rights_value)
+                        if value & 0x01:
+                            sd_rights['OWNER'] = 'WRITE'
+                        if value & 0x04:
+                            sd_rights['DACL'] = 'WRITE'
+                        if value & 0x08:
+                            sd_rights['SACL'] = 'WRITE'
+                    except (ValueError, TypeError):
+                        pass
 
-                    if permissions or sd_rights:
-                        all_results.append({
-                            'dn': r['dn'],
-                            'permissions': permissions,
-                            'sd_rights': sd_rights,
-                        })
+                if permissions or sd_rights:
+                    all_results.append({
+                        'dn': r['dn'],
+                        'permissions': permissions,
+                        'sd_rights': sd_rights,
+                    })
 
-            ctx['results'] = all_results
-        except Exception as e:
-            ctx['error'] = f'Error: {e}'
+        ctx['results'] = all_results
+    except Exception as e:
+        ctx['error'] = f'Error: {e}'
 
     if request.headers.get('HX-Request') and ctx['results'] is not None:
         return render_template('partials/writable_results.html', results=ctx['results'])
@@ -1091,7 +1068,7 @@ def members_view(group):
     member_names = []
     for dn in members_list:
         try:
-            response, _ = _ldap_search_single(conn, dn, '(objectClass=*)', ['sAMAccountName'], ldap3.BASE)
+            response, _ = ldap_search_with_retry(conn, dn, '(objectClass=*)', ['sAMAccountName'], ldap3.BASE)
             for entry in response:
                 if entry.get('type') == 'searchResEntry':
                     member_names.append(entry['attributes'].get('sAMAccountName', dn))
@@ -1114,7 +1091,7 @@ def membership_view(account):
         if depth > max_depth:
             return
         try:
-            response, _ = _ldap_search_single(
+            response, _ = ldap_search_with_retry(
                 conn, conn._baseDN,
                 f'(sAMAccountName={escape_filter_chars(acct)})',
                 ['memberOf', 'primaryGroupID'],

@@ -8,7 +8,7 @@ setup(
     version="0.0.1",
     license="MIT",
     author="LightxR",
-    url="https://github.com/LightxR/ADL",
+    url="https://github.com/LightxR/pwnAD",
     long_description=readme,
     long_description_content_type="text/markdown",
     install_requires=[

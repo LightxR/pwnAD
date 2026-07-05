@@ -1,9 +1,10 @@
 import logging
+from typing import Optional
 from impacket.krb5 import constants
 
 from pwnAD.lib.utils import parse_lm_nt_hashes
 from pwnAD.lib.ldap import LDAPConnection
-from pwnAD.lib.certificate import (  
+from pwnAD.lib.certificate import (
     load_pfx,
     rsa,
     x509,
@@ -14,32 +15,32 @@ from pwnAD.lib.certificate import (
 
 class Authenticate:
     def __init__(
-            self, 
-            domain=None, 
-            dc_ip=None, 
-            username=None, 
-            password=None, 
-            hashes=None, 
-            aesKey=None, 
-            pfx=None, 
-            pfx_pass=None, 
-            cert: x509.Certificate=None,
-            key: rsa.RSAPublicKey=None,
-            use_kerberos=None, 
-            kdcHost=None, 
-            port=None,
-            no_hash=None,
-            _do_tls=False,
-            principalType=constants.PrincipalNameType.NT_PRINCIPAL,
-            spn=None,
-            altservice=None,
-            impersonate=None,
-            additional_ticket=None,
-            u2u=None,
-            no_s4u2proxy=None,
-            force_forwardable=None,
-            renew=None
-    ):
+            self,
+            domain: Optional[str] = None,
+            dc_ip: Optional[str] = None,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            hashes: Optional[str] = None,
+            aesKey: Optional[str] = None,
+            pfx: Optional[str] = None,
+            pfx_pass: Optional[str] = None,
+            cert: Optional[x509.Certificate] = None,
+            key: Optional[rsa.RSAPublicKey] = None,
+            use_kerberos: Optional[bool] = None,
+            kdcHost: Optional[str] = None,
+            port: Optional[int] = None,
+            no_hash: Optional[bool] = None,
+            _do_tls: bool = False,
+            principalType: constants.PrincipalNameType = constants.PrincipalNameType.NT_PRINCIPAL,
+            spn: Optional[str] = None,
+            altservice: Optional[str] = None,
+            impersonate: Optional[str] = None,
+            additional_ticket: Optional[str] = None,
+            u2u: Optional[bool] = None,
+            no_s4u2proxy: Optional[bool] = None,
+            force_forwardable: Optional[bool] = None,
+            renew: Optional[bool] = None,
+    ) -> None:
         self.domain = domain
         self.dc_ip = dc_ip
         self.username = username
@@ -77,7 +78,7 @@ class Authenticate:
             logging.warning("Specify KDC's Hostname of FQDN using the argument --kdcHost")
             raise ValueError("KDC hostname must be specified when using Kerberos")
 
-    def ldap_authentication(self):
+    def ldap_authentication(self) -> LDAPConnection:
 
         logging.debug("Authentication with LDAP")
 
@@ -107,7 +108,7 @@ class Authenticate:
         connection.connect()
         return connection
         
-    def kerberos_authentication(self):
+    def kerberos_authentication(self) -> None:
 
         if self.cert is not None and self.key is not None:
             with open(self.cert, "rb") as f:

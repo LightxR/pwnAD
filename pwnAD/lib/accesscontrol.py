@@ -2,6 +2,7 @@ from impacket.ldap import ldaptypes
 from impacket.uuid import string_to_bin, bin_to_string
 from impacket.msada_guids import SCHEMA_OBJECTS, EXTENDED_RIGHTS
 import uuid
+from typing import Any, Optional, Union
 
 
 # GUIDs for Extended Rights (used in DACL operations)
@@ -246,7 +247,7 @@ UAC_NORMAL_ACCOUNT_DISABLED = 0x200 | 0x02  # Normal account, disabled (514)
 UAC_NORMAL_ACCOUNT_DONT_EXPIRE = 0x200 | 0x10000  # Normal + password never expires (66048)
 
 
-def create_allow_ace(sid, object_type=None, access_mask=ACCESS_FLAGS["FULL_CONTROL"], inheritance=False):
+def create_allow_ace(sid: str, object_type: Optional[str] = None, access_mask: int = ACCESS_FLAGS["FULL_CONTROL"], inheritance: bool = False) -> ldaptypes.ACE:
     nace = ldaptypes.ACE()
     if inheritance:
         nace['AceFlags'] = ldaptypes.ACE.OBJECT_INHERIT_ACE + ldaptypes.ACE.CONTAINER_INHERIT_ACE
@@ -372,7 +373,7 @@ WELL_KNOWN_SIDS = {
 }
 
 
-def create_ace(sid, access_mask, object_type=None, ace_type="allowed", inheritance=False):
+def create_ace(sid: str, access_mask: int, object_type: Optional[str] = None, ace_type: str = "allowed", inheritance: bool = False) -> ldaptypes.ACE:
     """
     Create an ACE (Access Control Entry) with flexible parameters.
 
@@ -425,7 +426,7 @@ def create_ace(sid, access_mask, object_type=None, ace_type="allowed", inheritan
     return nace
 
 
-def create_deny_ace(sid, access_mask, object_type=None, inheritance=False):
+def create_deny_ace(sid: str, access_mask: int, object_type: Optional[str] = None, inheritance: bool = False) -> ldaptypes.ACE:
     """
     Create an ACCESS_DENIED ACE.
 
@@ -441,7 +442,7 @@ def create_deny_ace(sid, access_mask, object_type=None, inheritance=False):
     return create_ace(sid, access_mask, object_type, ace_type="denied", inheritance=inheritance)
 
 
-def parse_ace(ace):
+def parse_ace(ace: ldaptypes.ACE) -> dict:
     """
     Parse an ACE into a readable dictionary.
 
@@ -579,7 +580,7 @@ def _resolve_guid_name(guid_str):
     return None
 
 
-def ace_matches(ace, sid=None, access_mask=None, object_type=None, ace_type=None):
+def ace_matches(ace: ldaptypes.ACE, sid: Optional[str] = None, access_mask: Optional[int] = None, object_type: Optional[str] = None, ace_type: Optional[str] = None) -> bool:
     """
     Check if an ACE matches the given criteria.
 
@@ -633,7 +634,7 @@ def ace_matches(ace, sid=None, access_mask=None, object_type=None, ace_type=None
     return True
 
 
-def guid_to_string(guid_bytes):
+def guid_to_string(guid_bytes: Union[bytes, str]) -> str:
     """
     Convert GUID bytes to string representation.
 
@@ -651,7 +652,7 @@ def guid_to_string(guid_bytes):
         return str(uuid.UUID(bytes_le=guid_bytes))
 
 
-def resolve_sid_to_name(conn, sid):
+def resolve_sid_to_name(conn: Any, sid: str) -> str:
     """
     Resolve a SID to a sAMAccountName via LDAP.
 
@@ -677,7 +678,7 @@ def resolve_sid_to_name(conn, sid):
     return sid
 
 
-def get_rights_from_mask(access_mask, object_type=None):
+def get_rights_from_mask(access_mask: int, object_type: Optional[str] = None) -> list:
     """
     Determine which known rights are represented by an access mask.
 

@@ -26,7 +26,7 @@ def infos(conn):
     logging.info(f"key: \t{True if (conn.key and not conn.pfx) else None}")
     logging.info(f"cert: \t{True if (conn.cert and not conn.pfx) else None}")
     logging.info(f"kerberos: \t{conn.use_kerberos}")
-    logging.info(f"TLS: \t{True if conn._do_tls is not None else False}")
+    logging.info(f"TLS: \t{bool(conn._do_tls)}")
 
 
 def start_interactive_mode(conn):
@@ -52,9 +52,9 @@ def start_interactive_mode(conn):
                 continue
 
             if user_input.startswith('!'):
-                command_to_run = user_input[1:]
+                command_to_run = user_input[1:].strip()
                 try:
-                    subprocess.run(command_to_run, shell=True, check=False)
+                    subprocess.run(shlex.split(command_to_run), check=False)
                 except Exception as e:
                     logging.error(f"Command execution failed: {e}")
                 continue
@@ -65,7 +65,7 @@ def start_interactive_mode(conn):
 
             if command == "exit":
                 print("See you soon !")
-                sys.exit(1)
+                sys.exit(0)
             
             elif command == "start_tls":
                 conn.start_tls()
@@ -231,10 +231,10 @@ def start_interactive_mode(conn):
                     continue  
             except KeyboardInterrupt as e:
                 print("\nSee you soon!")
-                sys.exit(1) 
-            
+                sys.exit(0)
+
             print("\nSee you soon!")
-            sys.exit(1)  
+            sys.exit(0)
 
         except Exception as e:
             logging.error(f"An error has occured : {e}")
