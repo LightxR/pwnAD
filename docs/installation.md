@@ -46,6 +46,9 @@ pwnAD relies on the following key packages:
 | `asn1crypto` | ASN.1 parsing |
 | `pyasn1==0.4.8` | ASN.1 structures |
 | `dsinternals` | Active Directory internal structures |
+| `bloodhound-ce` | BloodHound CE data collection ([BloodHound.py](https://github.com/dirkjanm/BloodHound.py)) |
+| `flask` | Web interface backend |
+| `waitress` | Production WSGI server for the web interface |
 
 ## Verifying Installation
 

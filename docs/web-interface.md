@@ -53,14 +53,50 @@ Then open <http://127.0.0.1:5000> in your browser.
 
 ## Features
 
-- **Browse** — navigate the directory tree, search objects, inspect and edit
+### Enumeration & Browsing
+
+- **Dashboard** - domain overview with key statistics.
+- **Browse** - navigate the directory tree, search objects, inspect and edit
   attributes, enable/disable accounts, reset passwords, restore deleted objects.
-- **Writable** — enumerate objects the current principal can write to
+- **Queries** - pre-built queries for common targets (Kerberoastables, AS-REP
+  roastables, delegation, admin counts, SID history, etc.).
+- **Custom Query** - run arbitrary LDAP filters.
+- **GPOs** - list and inspect Group Policy Objects.
+- **Trusts** - domain trust relationships.
+- **Foreign Members** - cross-domain group memberships.
+
+### ADCS
+
+- **ADCS** - enumerate certificate authorities, templates, and their permissions.
+- **ADCS Scan** - automated vulnerability scanning for ESC1–ESC8 misconfigurations.
+- **Certificate Request** - request certificates from ADCS via MS-ICPR RPC
+  (ESC1 exploitation: custom UPN/DNS/SID in the SAN).
+
+### Security Analysis
+
+- **ACL Abuse** - find dangerous ACEs on sensitive objects (GenericAll, WriteDacl,
+  WriteOwner, DCSync, etc.).
+- **Privilege Escalation** - identify escalation paths through group memberships and
+  ACL chains.
+- **Delegation Map** - unconstrained, constrained, and RBCD delegation overview.
+- **Misconfigurations** - detect common AD misconfigurations.
+
+### Operations
+
+- **DACL** - read, add and remove ACEs; change object owners.
+- **DNS** - list and manage ADIDNS records.
+- **Shadow Credentials** - add/list/remove `msDS-KeyCredentialLink` entries.
+- **Attacks** - password spraying, password reset, account manipulation.
+- **Writable** - enumerate objects the current principal can write to
   (computed via `allowedAttributesEffective` / `sDRightsEffective`).
-- **DACL** — read, add and remove ACEs; change object owners.
-- **DNS** — list and manage ADIDNS records.
-- **Shadow Credentials** — add/list/remove `msDS-KeyCredentialLink` entries.
-- **ADCS** — enumerate certificate authorities and templates.
+
+### Export
+
+- **BloodHound Export** - export domain data to BloodHound CE format. Supports
+  preset collection profiles (All, DC Only) and granular method selection
+  (group, localadmin, session, trusts, objectprops, acl, dcom, rdp, psremote,
+  container, loggedon). Options include custom DNS resolver, worker threads,
+  filename prefix, and DC exclusion.
 
 ## Stopping the Server
 

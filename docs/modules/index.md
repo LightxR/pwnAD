@@ -18,9 +18,11 @@ Modules are specialized attack implementations that combine multiple operations:
 - **Certificate operations** - Generate and use X.509 certificates
 - **PKINIT integration** - Leverage Kerberos certificate authentication
 
-## Future Modules
+## Related Features
 
-Additional modules are planned for future releases. Potential additions include:
+These features are available as `get` subcommands rather than standalone modules:
 
-- ADCS (Active Directory Certificate Services) attacks
-- Trust relationship exploitation
+- **ADCS certificate request** (`get adcs_req`) - Request certificates from AD Certificate Services via MS-ICPR RPC, with support for custom SAN (UPN, DNS, SID) for ESC1 exploitation.
+- **BloodHound CE export** (`get bloodhound`) - Export domain data in BloodHound Community Edition format using [BloodHound.py](https://github.com/dirkjanm/BloodHound.py). Supports all collection methods (group, localadmin, session, trusts, objectprops, acl, dcom, rdp, psremote, container, loggedon).
+
+Both are also accessible from the [web interface](../web-interface.md).

@@ -1,6 +1,6 @@
 # Commands Overview
 
-pwnAD provides five main LDAP commands for interacting with Active Directory.
+pwnAD provides five main LDAP commands for interacting with Active Directory, plus specialized subcommands for ADCS and BloodHound export.
 
 ## Available Commands
 
@@ -8,7 +8,7 @@ pwnAD provides five main LDAP commands for interacting with Active Directory.
 |---------|-------------|
 | [add](add.md) | Add objects or permissions to AD |
 | [remove](remove.md) | Remove objects or permissions from AD |
-| [get](get.md) | Retrieve and enumerate AD objects |
+| [get](get.md) | Retrieve and enumerate AD objects, request certificates, export to BloodHound |
 | [modify](modify.md) | Modify AD objects and attributes |
 | [query](query.md) | Execute raw LDAP queries |
 
