@@ -1616,8 +1616,8 @@ def _extract_auth_info(conn):
             'lmhash': getattr(conn, 'lmhash', ''),
             'nthash': getattr(conn, 'nthash', ''),
             'aesKey': getattr(conn, 'aesKey', ''),
-            'doKerberos': getattr(conn, '_do_kerberos', False),
-            'kdcHost': getattr(conn, '_dc_ip', None),
+            'doKerberos': getattr(conn, 'use_kerberos', False),
+            'kdcHost': getattr(conn, 'kdcHost', None),
         }
         return auth_info
     except Exception:
@@ -1639,7 +1639,7 @@ def analyze_adcs(conn, vulnerable_only=False, get_ca_config=True, auth_info=None
     """
     # Get user SIDs first (for enrollment check)
     user_sids = get_user_sids(conn)
-    logging.info(f"Checking enrollment permissions for user ({len(user_sids)} SIDs including groups)")
+    logging.debug(f"Checking enrollment permissions for user ({len(user_sids)} SIDs including groups)")
 
     # Get OID links for ESC13
     oid_links = get_oid_to_group_links(conn)

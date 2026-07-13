@@ -1,21 +1,28 @@
-<!-- Back button -->
+<!-- Object Header -->
 <div class="flex items-center gap-3 mb-2">
     <a href="javascript:history.back()" class="text-neutral-400 hover:text-white transition">
         <i class="fas fa-arrow-left"></i>
     </a>
-    <h2 class="text-lg font-semibold text-white">Object Detail</h2>
+    {% set obj_class = obj.attributes.get('objectClass', []) %}
+    {% set is_user = 'user' in obj_class or 'person' in obj_class %}
+    {% set is_computer = 'computer' in obj_class %}
+    {% set is_group = 'group' in obj_class %}
+    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0
+        {% if is_computer %}bg-purple-500/15 text-purple-400
+        {% elif is_group %}bg-green-500/15 text-green-400
+        {% else %}bg-blue-500/15 text-blue-400{% endif %}">
+        <i class="fas {% if is_computer %}fa-desktop{% elif is_group %}fa-users{% else %}fa-user{% endif %}"></i>
+    </div>
+    <div class="min-w-0 flex-1">
+        <h2 class="text-lg font-semibold text-white truncate">{{ obj.attributes.get('sAMAccountName', '') or obj.attributes.get('cn', '') or obj.dn.split(',')[0] }}</h2>
+        <div class="text-xs font-mono text-neutral-500 truncate">{{ obj.dn }}</div>
+    </div>
 </div>
 
 <!-- DN Banner with Security Badges -->
 <div class="rounded-lg border {% if is_deleted %}border-red-500/50 bg-red-900/20{% else %}border-neutral-800 bg-neutral-900{% endif %} p-4 mb-2">
-    <div class="flex items-center justify-between">
-        <div class="flex-1">
-            <div class="text-xs text-neutral-500 mb-1">Distinguished Name</div>
-            <div class="text-sm font-mono text-red-400 break-all">{{ obj.dn }}</div>
-        </div>
-    </div>
     {% if is_deleted %}
-    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-red-500/30">
+    <div class="flex items-center gap-2">
         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/20 text-red-400 border border-red-500/30">
             <i class="fas fa-trash-can"></i> This object is deleted
         </span>
@@ -40,6 +47,7 @@
     {% set obj_class = obj.attributes.get('objectClass', []) %}
     {% set is_user = 'user' in obj_class or 'person' in obj_class %}
     {% set is_computer = 'computer' in obj_class %}
+    {% set is_disabled = (uac // 2) % 2 == 1 %}
 
     {% if has_spn or dont_req_preauth or trusted_for_delegation or trusted_to_auth or has_rbcd or has_shadow or is_admin %}
     <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-neutral-800">
@@ -84,10 +92,6 @@
 
 <!-- Action Bar -->
 {% set sam = obj.attributes.get('sAMAccountName', '') %}
-{% set obj_class = obj.attributes.get('objectClass', []) %}
-{% set is_user = 'user' in obj_class or 'person' in obj_class %}
-{% set is_computer = 'computer' in obj_class %}
-{% set is_group = 'group' in obj_class %}
 <div class="flex items-center gap-2 mb-2 flex-wrap">
     {% if not is_deleted %}
     <!-- Security Actions (hidden for deleted objects) -->
@@ -172,6 +176,20 @@
                     <i class="fas fa-fire text-orange-400 w-5"></i> Add SPN (Kerberoast)
                 </button>
                 {% endif %}
+                <div class="border-t border-neutral-800 my-1"></div>
+                {% if has_spn and is_user %}
+                <button onclick="attackKerberoast('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-fire-flame-curved text-orange-400 w-5"></i> Get TGS Hash (Kerberoast)
+                </button>
+                {% endif %}
+                {% if dont_req_preauth %}
+                <button onclick="attackASREPRoast('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-bolt text-yellow-400 w-5"></i> Get AS-REP Hash
+                </button>
+                {% endif %}
+                <button onclick="attackUnlock('{{ sam }}')" class="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 transition">
+                    <i class="fas fa-lock-open text-green-400 w-5"></i> Unlock Account
+                </button>
             </div>
         </div>
     </div>
@@ -205,7 +223,7 @@
             <div>
                 <div class="text-xs text-neutral-500">Owner</div>
                 {% if owner_info %}
-                    <span class="text-sm text-white font-medium">{{ owner_info.name }}</span>
+                    <a href="/queries?search={{ owner_info.name|urlencode }}" class="text-sm text-white font-medium hover:text-blue-400 transition">{{ owner_info.name }}</a>
                     {% if owner_info.name != owner_info.sid %}
                         <span class="text-xs text-neutral-500 ml-2">({{ owner_info.sid }})</span>
                     {% endif %}
@@ -234,8 +252,72 @@
     </div>
 </div>
 
-<!-- Attributes Table -->
-<div class="flex-1 rounded-lg border border-neutral-800 bg-neutral-900 min-h-0 flex flex-col">
+<!-- Security Insights (only for users/computers) -->
+{% if is_user or is_computer %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 mb-2">
+    <div class="flex items-center gap-2 mb-3">
+        <i class="fas fa-shield-halved text-red-500"></i>
+        <h3 class="text-sm font-semibold text-white">Security Insights</h3>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if is_disabled %}bg-red-500{% else %}bg-green-500{% endif %}"></span>
+            <span class="text-xs text-neutral-400">Account Status</span>
+            <span class="ml-auto text-xs font-medium {% if is_disabled %}text-red-400{% else %}text-green-400{% endif %}">{% if is_disabled %}Disabled{% else %}Active{% endif %}</span>
+        </div>
+        {% if is_user %}
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if has_spn %}bg-orange-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">Kerberoastable</span>
+            <span class="ml-auto text-xs font-medium {% if has_spn %}text-orange-400{% else %}text-neutral-600{% endif %}">{% if has_spn %}Yes{% else %}No{% endif %}</span>
+        </div>
+        {% endif %}
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if dont_req_preauth %}bg-yellow-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">AS-REP Roastable</span>
+            <span class="ml-auto text-xs font-medium {% if dont_req_preauth %}text-yellow-400{% else %}text-neutral-600{% endif %}">{% if dont_req_preauth %}Yes{% else %}No{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if trusted_for_delegation %}bg-red-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">Unconstrained Deleg.</span>
+            <span class="ml-auto text-xs font-medium {% if trusted_for_delegation %}text-red-400{% else %}text-neutral-600{% endif %}">{% if trusted_for_delegation %}Yes{% else %}No{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if trusted_to_auth %}bg-blue-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">Constrained Deleg.</span>
+            <span class="ml-auto text-xs font-medium {% if trusted_to_auth %}text-blue-400{% else %}text-neutral-600{% endif %}">{% if trusted_to_auth %}Yes{% else %}No{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if has_rbcd %}bg-purple-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">RBCD</span>
+            <span class="ml-auto text-xs font-medium {% if has_rbcd %}text-purple-400{% else %}text-neutral-600{% endif %}">{% if has_rbcd %}Configured{% else %}None{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if has_shadow %}bg-pink-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">Shadow Creds</span>
+            <span class="ml-auto text-xs font-medium {% if has_shadow %}text-pink-400{% else %}text-neutral-600{% endif %}">{% if has_shadow %}Present{% else %}None{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if is_admin %}bg-amber-500{% else %}bg-neutral-600{% endif %}"></span>
+            <span class="text-xs text-neutral-400">AdminCount</span>
+            <span class="ml-auto text-xs font-medium {% if is_admin %}text-amber-400{% else %}text-neutral-600{% endif %}">{% if is_admin %}1{% else %}0{% endif %}</span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Tabs -->
+<div class="flex items-center border-b border-neutral-800 mb-2">
+    <button onclick="switchTab('attributes')" id="tab-attributes" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition border-red-500 text-white">Attributes</button>
+    {% if is_group or is_user %}
+    <button onclick="switchTab('members')" id="tab-members" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition border-transparent text-neutral-500 hover:text-neutral-300">{% if is_group %}Members{% else %}Member Of{% endif %}</button>
+    {% endif %}
+    <button onclick="switchTab('dacl')" id="tab-dacl" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition border-transparent text-neutral-500 hover:text-neutral-300">DACL</button>
+</div>
+
+<!-- Tab: Attributes -->
+<div id="panel-attributes" class="tab-panel">
+<div class="rounded-lg border border-neutral-800 bg-neutral-900">
     <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
         <span class="text-sm text-neutral-400">
             Attributes <span class="text-white font-medium">{{ obj.attributes|length }}</span>
@@ -273,9 +355,9 @@
         </form>
     </div>
 
-    <div class="flex-1 overflow-auto scrollbar">
+    <div>
         <table class="min-w-full text-left text-sm" id="attr-table">
-            <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+            <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
                 <tr>
                     <th class="px-4 py-3 font-medium w-64">Attribute</th>
                     <th class="px-4 py-3 font-medium">Value</th>
@@ -333,8 +415,120 @@
         </table>
     </div>
 </div>
+</div><!-- /panel-attributes -->
+
+<!-- Tab: Members -->
+{% if is_group or is_user %}
+<div id="panel-members" class="tab-panel hidden">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        {% if is_group %}
+        {% set members = obj.attributes.get('member', []) %}
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">
+                Members <span class="text-white font-medium">{{ members|length if members is iterable and members is not string else (1 if members else 0) }}</span>
+            </span>
+        </div>
+        <div>
+            <table class="min-w-full text-left text-sm">
+                <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Distinguished Name</th>
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-800/50">
+                    {% if members is string %}
+                    <tr class="hover:bg-white/[0.02] transition">
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ members|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ members }}</a></td>
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ members|urlencode }}" class="text-xs text-neutral-400 hover:text-white transition">View</a></td>
+                    </tr>
+                    {% elif members is iterable %}
+                    {% for m in members %}
+                    <tr class="hover:bg-white/[0.02] transition">
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ m|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ m }}</a></td>
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ m|urlencode }}" class="text-xs text-neutral-400 hover:text-white transition">View</a></td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                    {% if not members or (members is iterable and members is not string and members|length == 0) %}
+                    <tr>
+                        <td colspan="2" class="px-4 py-8 text-center text-neutral-500">
+                            <i class="fas fa-users text-2xl mb-2 block opacity-30"></i>
+                            No members
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        {% set memberships = obj.attributes.get('memberOf', []) %}
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <span class="text-sm text-neutral-400">
+                Member Of <span class="text-white font-medium">{{ memberships|length if memberships is iterable and memberships is not string else (1 if memberships else 0) }}</span>
+            </span>
+        </div>
+        <div>
+            <table class="min-w-full text-left text-sm">
+                <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Group</th>
+                        <th class="px-4 py-3 font-medium w-20"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-800/50">
+                    {% if memberships is string %}
+                    <tr class="hover:bg-white/[0.02] transition">
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ memberships|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ memberships }}</a></td>
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ memberships|urlencode }}" class="text-xs text-neutral-400 hover:text-white transition">View</a></td>
+                    </tr>
+                    {% elif memberships is iterable %}
+                    {% for g in memberships %}
+                    <tr class="hover:bg-white/[0.02] transition">
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ g|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline text-xs font-mono">{{ g }}</a></td>
+                        <td class="px-4 py-2.5"><a href="/object?dn={{ g|urlencode }}" class="text-xs text-neutral-400 hover:text-white transition">View</a></td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                    {% if not memberships or (memberships is iterable and memberships is not string and memberships|length == 0) %}
+                    <tr>
+                        <td colspan="2" class="px-4 py-8 text-center text-neutral-500">
+                            <i class="fas fa-users text-2xl mb-2 block opacity-30"></i>
+                            No group memberships
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Tab: DACL -->
+<div id="panel-dacl" class="tab-panel hidden">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 flex items-center justify-center p-6">
+        <i class="fas fa-lock text-3xl text-neutral-600 mb-3"></i>
+        <p class="text-neutral-400 mb-4">View and manage the discretionary access control list for this object.</p>
+        <a href="/dacl?dn={{ obj.dn|urlencode }}" class="inline-flex items-center gap-2 rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-lock mr-1"></i> Open DACL View
+        </a>
+    </div>
+</div>
 
 <script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.classList.remove('border-red-500', 'text-white');
+        b.classList.add('border-transparent', 'text-neutral-500');
+    });
+    document.getElementById('tab-' + tab).classList.add('border-red-500', 'text-white');
+    document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-neutral-500');
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
+    document.getElementById('panel-' + tab).classList.remove('hidden');
+}
+
 function filterAttrs(q) {
     document.querySelectorAll('.attr-row').forEach(function(r) {
         r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
@@ -657,6 +851,93 @@ async function addMemberToGroup() {
         .then(function(data) {
             showToast(data.message, data.success ? 'success' : 'error');
             if (data.success) setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// Kerberoast - get TGS hash
+async function attackKerberoast(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var confirmed = await showModal({
+        title: 'Kerberoast',
+        message: 'Request TGS ticket for ' + target + ' and extract the hash?\n\nThe hash will be in hashcat-compatible format.',
+        type: 'warning',
+        confirmText: 'Get Hash',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/api/attack/kerberoast', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showModal({
+                    title: 'TGS Hash Retrieved',
+                    message: data.hash,
+                    type: 'info',
+                    confirmText: 'Copy',
+                    cancelText: 'Close'
+                }).then(function(ok) {
+                    if (ok) navigator.clipboard.writeText(data.hash).then(function() { showToast('Hash copied to clipboard', 'success'); });
+                });
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// AS-REP Roast - get AS-REP hash
+async function attackASREPRoast(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var confirmed = await showModal({
+        title: 'AS-REP Roast',
+        message: 'Request AS-REP for ' + target + ' without preauthentication?\n\nThe hash will be in hashcat-compatible format.',
+        type: 'warning',
+        confirmText: 'Get Hash',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/api/attack/asreproast', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showModal({
+                    title: 'AS-REP Hash Retrieved',
+                    message: data.hash,
+                    type: 'info',
+                    confirmText: 'Copy',
+                    cancelText: 'Close'
+                }).then(function(ok) {
+                    if (ok) navigator.clipboard.writeText(data.hash).then(function() { showToast('Hash copied to clipboard', 'success'); });
+                });
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(function() { showToast('Request failed', 'error'); });
+}
+
+// Unlock account
+async function attackUnlock(target) {
+    document.getElementById('attack-menu').classList.add('hidden');
+    var confirmed = await showModal({
+        title: 'Unlock Account',
+        message: 'Unlock the account ' + target + ' by resetting the lockout timer?',
+        type: 'info',
+        confirmText: 'Unlock',
+        cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    var formData = new FormData();
+    formData.append('target', target);
+    fetch('/api/attack/unlock', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
         })
         .catch(function() { showToast('Request failed', 'error'); });
 }

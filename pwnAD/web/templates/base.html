@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}pwnAD{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/tailwind.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
+    <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}"></script>
     <style>
         .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -15,19 +15,15 @@
         .htmx-indicator { display: none; }
         .htmx-request .htmx-indicator { display: inline-block; }
         .htmx-request.htmx-indicator { display: inline-block; }
+        #global-loader { position:fixed; top:0; left:0; width:0; height:2px; background:linear-gradient(90deg,#ef4444,#f97316); z-index:9999; transition:width .2s; }
+        #global-loader.active { width:70%; }
+        #global-loader.done { width:100%; opacity:0; transition:width .2s, opacity .3s .1s; }
+        th.sortable { cursor:pointer; user-select:none; }
+        th.sortable:hover { color:#e5e5e5; }
+        th.sortable .sort-icon { margin-left:4px; opacity:0.3; font-size:0.6rem; }
+        th.sortable.asc .sort-icon, th.sortable.desc .sort-icon { opacity:1; color:#ef4444; }
         tr.clickable-row:hover { background: rgba(255,255,255,0.03); cursor: pointer; }
-        .sidebar-link { @apply flex items-center gap-3 px-3 py-2 text-sm rounded-md font-medium text-neutral-400 hover:bg-white/5 hover:text-white transition; }
-        .sidebar-link.active { @apply bg-white/10 text-white; }
-        .sidebar-link i { @apply w-5 text-center opacity-70; }
-        .sidebar-link:hover i { @apply opacity-100; }
-        /* Collapsible sections */
-        .sidebar-section { @apply overflow-hidden transition-all duration-200; }
-        .sidebar-section.collapsed { max-height: 0 !important; opacity: 0; }
-        .sidebar-section.expanded { opacity: 1; }
-        .sidebar-header { @apply flex items-center justify-between cursor-pointer select-none; }
-        .sidebar-header:hover { @apply text-neutral-300; }
-        .sidebar-header .chevron { @apply transition-transform duration-200; }
-        .sidebar-header.collapsed .chevron { transform: rotate(-90deg); }
+        nav .sidebar-link { padding-top: 0.375rem; padding-bottom: 0.375rem; }
         /* Toast animations */
         @keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes toast-out { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
@@ -43,30 +39,19 @@
         .modal-content-enter { animation: modal-scale-in 0.15s ease-out; }
         .modal-content-exit { animation: modal-scale-out 0.15s ease-in forwards; }
     </style>
-    <script>
-    tailwind.config = {
-        darkMode: 'class',
-        theme: {
-            extend: {
-                colors: {
-                    accent: { DEFAULT: '#ef4444', hover: '#dc2626', subtle: '#fca5a5' }
-                }
-            }
-        }
-    }
-    </script>
 </head>
 <body class="bg-neutral-950 text-neutral-300 h-screen flex overflow-hidden">
+    <div id="global-loader"></div>
     <!-- Sidebar -->
-    <nav class="hidden md:flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 p-4 h-screen overflow-y-auto scrollbar">
+    <nav class="hidden md:flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 px-4 pt-4 pb-3 h-screen overflow-y-auto scrollbar">
         <!-- Logo -->
-        <a href="/" class="ml-1 mb-6 text-2xl font-bold text-white">
+        <a href="/" class="ml-1 mb-4 text-2xl font-bold text-white">
             pwn<span class="text-red-500">AD</span>
             <span class="text-[0.6rem] align-super font-medium bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded ml-1">Web</span>
         </a>
 
         <!-- Navigation -->
-        <div class="flex flex-col gap-1 flex-1">
+        <div class="flex flex-col flex-1">
             <a href="/" class="sidebar-link {% if active_page == 'dashboard' %}active{% endif %}">
                 <i class="fas fa-gauge-high"></i>
                 <span>Dashboard</span>
@@ -97,6 +82,10 @@
             <a href="/adcs" class="sidebar-link {% if active_page == 'adcs' %}active{% endif %}">
                 <i class="fas fa-certificate"></i>
                 <span>Certificate Authorities</span>
+            </a>
+            <a href="/gpos" class="sidebar-link {% if active_page == 'gpos' %}active{% endif %}">
+                <i class="fas fa-scroll"></i>
+                <span>GPOs</span>
             </a>
 
             <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">LDAP</div>
@@ -129,17 +118,55 @@
                 <span>Writable Objects</span>
             </a>
 
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Analysis</div>
+
+            <a href="/analysis/acl-abuse" class="sidebar-link {% if active_page == 'acl-abuse' %}active{% endif %}">
+                <i class="fas fa-spider"></i>
+                <span>ACL Abuse Finder</span>
+            </a>
+            <a href="/analysis/privesc" class="sidebar-link {% if active_page == 'privesc' %}active{% endif %}">
+                <i class="fas fa-route"></i>
+                <span>Privesc Paths</span>
+            </a>
+            <a href="/analysis/adcs-scan" class="sidebar-link {% if active_page == 'adcs-scan' %}active{% endif %}">
+                <i class="fas fa-certificate"></i>
+                <span>ADCS Scanner</span>
+            </a>
+            <a href="/analysis/delegation" class="sidebar-link {% if active_page == 'delegation' %}active{% endif %}">
+                <i class="fas fa-project-diagram"></i>
+                <span>Delegation Map</span>
+            </a>
+            <a href="/analysis/misconfig" class="sidebar-link {% if active_page == 'misconfig' %}active{% endif %}">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Misconfigurations</span>
+            </a>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Export</div>
+
+            <a href="/bloodhound" class="sidebar-link {% if active_page == 'bloodhound' %}active{% endif %}">
+                <i class="fas fa-droplet"></i>
+                <span>BloodHound Export</span>
+            </a>
+
             <div class="mt-4 mb-2 px-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Network</div>
 
             <a href="/dns" class="sidebar-link {% if active_page == 'dns' %}active{% endif %}">
                 <i class="fas fa-globe"></i>
                 <span>DNS Records</span>
             </a>
+            <a href="/trusts" class="sidebar-link {% if active_page == 'trusts' %}active{% endif %}">
+                <i class="fas fa-handshake"></i>
+                <span>Domain Trusts</span>
+            </a>
+            <a href="/foreign-members" class="sidebar-link {% if active_page == 'foreign-members' %}active{% endif %}">
+                <i class="fas fa-user-secret"></i>
+                <span>Foreign Members</span>
+            </a>
         </div>
 
         <!-- Connection Info -->
-        <div class="mt-auto pt-4 border-t border-neutral-800">
-            <div class="px-2 py-2">
+        <div class="mt-auto pt-3 border-t border-neutral-800">
+            <div class="px-2 py-1">
                 <div class="text-sm font-bold text-white">{{ session_user or 'N/A' }}</div>
                 <div class="text-xs text-neutral-500">{{ domain or '' }}</div>
                 <div class="text-xs text-neutral-500">{{ dc_ip or '' }}</div>
@@ -158,24 +185,41 @@
             <i class="fas fa-bars text-lg"></i>
         </button>
     </div>
-    <div id="mobile-nav" class="hidden md:hidden fixed inset-0 z-20 bg-neutral-900/95 pt-16 p-4 overflow-y-auto">
-        <a href="/" class="sidebar-link"><i class="fas fa-gauge-high"></i> Dashboard</a>
-        <a href="/browse/users" class="sidebar-link"><i class="fas fa-user"></i> Users</a>
-        <a href="/browse/groups" class="sidebar-link"><i class="fas fa-users"></i> Groups</a>
-        <a href="/browse/computers" class="sidebar-link"><i class="fas fa-desktop"></i> Computers</a>
-        <a href="/browse/ous" class="sidebar-link"><i class="fas fa-sitemap"></i> OUs</a>
-        <a href="/queries" class="sidebar-link"><i class="fas fa-filter"></i> Builtin Queries</a>
-        <a href="/query/custom" class="sidebar-link"><i class="fas fa-terminal"></i> Custom LDAP</a>
-        <a href="/dacl" class="sidebar-link"><i class="fas fa-lock"></i> DACL Editor</a>
-        <a href="/shadow" class="sidebar-link"><i class="fas fa-key"></i> Shadow Credentials</a>
-        <a href="/attacks" class="sidebar-link"><i class="fas fa-crosshairs"></i> Attacks</a>
-        <a href="/writable" class="sidebar-link"><i class="fas fa-pen"></i> Writable Objects</a>
-        <a href="/adcs" class="sidebar-link"><i class="fas fa-certificate"></i> Certificate Authorities</a>
-        <a href="/dns" class="sidebar-link"><i class="fas fa-globe"></i> DNS Records</a>
+    <div id="mobile-nav" class="hidden md:hidden fixed inset-0 z-20 bg-neutral-900/95 pt-16 p-4 overflow-y-auto" onclick="if(event.target.tagName==='A')this.classList.add('hidden')">
+        <div class="flex flex-col gap-1">
+            <button onclick="this.closest('#mobile-nav').classList.add('hidden');openSearchModal('Search AD Objects')" class="sidebar-link text-left"><i class="fas fa-search"></i> Search (Ctrl+K)</button>
+            <a href="/" class="sidebar-link"><i class="fas fa-gauge-high"></i> Dashboard</a>
+            <div class="mt-3 mb-1 px-3 text-xs font-semibold text-neutral-500 uppercase">Objects</div>
+            <a href="/browse/users" class="sidebar-link"><i class="fas fa-user"></i> Users</a>
+            <a href="/browse/groups" class="sidebar-link"><i class="fas fa-users"></i> Groups</a>
+            <a href="/browse/computers" class="sidebar-link"><i class="fas fa-desktop"></i> Computers</a>
+            <a href="/browse/ous" class="sidebar-link"><i class="fas fa-sitemap"></i> OUs</a>
+            <a href="/adcs" class="sidebar-link"><i class="fas fa-certificate"></i> Certificate Authorities</a>
+            <a href="/gpos" class="sidebar-link"><i class="fas fa-scroll"></i> GPOs</a>
+            <div class="mt-3 mb-1 px-3 text-xs font-semibold text-neutral-500 uppercase">LDAP</div>
+            <a href="/queries" class="sidebar-link"><i class="fas fa-filter"></i> Builtin Queries</a>
+            <a href="/query/custom" class="sidebar-link"><i class="fas fa-terminal"></i> Custom LDAP</a>
+            <div class="mt-3 mb-1 px-3 text-xs font-semibold text-neutral-500 uppercase">Security</div>
+            <a href="/dacl" class="sidebar-link"><i class="fas fa-lock"></i> DACL Editor</a>
+            <a href="/shadow" class="sidebar-link"><i class="fas fa-key"></i> Shadow Credentials</a>
+            <a href="/attacks" class="sidebar-link"><i class="fas fa-crosshairs"></i> Attacks</a>
+            <a href="/writable" class="sidebar-link"><i class="fas fa-pen"></i> Writable Objects</a>
+            <div class="mt-3 mb-1 px-3 text-xs font-semibold text-neutral-500 uppercase">Analysis</div>
+            <a href="/analysis/acl-abuse" class="sidebar-link"><i class="fas fa-spider"></i> ACL Abuse Finder</a>
+            <a href="/analysis/privesc" class="sidebar-link"><i class="fas fa-route"></i> Privesc Paths</a>
+            <a href="/analysis/adcs-scan" class="sidebar-link"><i class="fas fa-certificate"></i> ADCS Scanner</a>
+            <a href="/analysis/delegation" class="sidebar-link"><i class="fas fa-project-diagram"></i> Delegation Map</a>
+            <a href="/analysis/misconfig" class="sidebar-link"><i class="fas fa-triangle-exclamation"></i> Misconfigurations</a>
+            <div class="mt-3 mb-1 px-3 text-xs font-semibold text-neutral-500 uppercase">Network</div>
+            <a href="/dns" class="sidebar-link"><i class="fas fa-globe"></i> DNS Records</a>
+            <a href="/trusts" class="sidebar-link"><i class="fas fa-handshake"></i> Domain Trusts</a>
+            <a href="/foreign-members" class="sidebar-link"><i class="fas fa-user-secret"></i> Foreign Members</a>
+        </div>
     </div>
 
     <!-- Main Content -->
     <div class="flex-1 h-screen overflow-y-auto scrollbar md:pt-0 pt-14">
+        {% block breadcrumbs %}{% endblock %}
         {% block content %}{% endblock %}
     </div>
 
@@ -573,8 +617,17 @@
         }, 300);
     }
 
-    // Close search modal on Escape
+    // Ctrl+K / Cmd+K global search shortcut
     document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            var modal = document.getElementById('search-modal');
+            if (modal.classList.contains('hidden')) {
+                openSearchModal('Search AD Objects');
+            } else {
+                closeSearchModal(null);
+            }
+        }
         if (e.key === 'Escape' && !document.getElementById('search-modal').classList.contains('hidden')) {
             closeSearchModal(null);
         }
@@ -634,6 +687,44 @@
 
     // Initialize sidebar state on load
     document.addEventListener('DOMContentLoaded', restoreSidebarState);
+
+    // Global HTMX loading bar
+    (function() {
+        var loader = document.getElementById('global-loader');
+        document.body.addEventListener('htmx:beforeRequest', function() {
+            loader.className = 'active';
+        });
+        document.body.addEventListener('htmx:afterRequest', function() {
+            loader.className = 'done';
+            setTimeout(function() { loader.className = ''; loader.style.width = ''; }, 400);
+        });
+    })();
+
+    // Client-side column sorting for tables with .sortable headers
+    function initSortableTable(tableId) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var headers = table.querySelectorAll('th.sortable');
+        headers.forEach(function(th, colIdx) {
+            th.addEventListener('click', function() {
+                var tbody = table.querySelector('tbody');
+                var rows = Array.from(tbody.querySelectorAll('tr'));
+                var asc = !th.classList.contains('asc');
+                headers.forEach(function(h) { h.classList.remove('asc', 'desc'); });
+                th.classList.add(asc ? 'asc' : 'desc');
+                rows.sort(function(a, b) {
+                    var ca = (a.children[colIdx] || {}).textContent || '';
+                    var cb = (b.children[colIdx] || {}).textContent || '';
+                    ca = ca.trim().toLowerCase();
+                    cb = cb.trim().toLowerCase();
+                    var na = parseFloat(ca), nb = parseFloat(cb);
+                    if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+                    return asc ? ca.localeCompare(cb) : cb.localeCompare(ca);
+                });
+                rows.forEach(function(r) { tbody.appendChild(r); });
+            });
+        });
+    }
 
     // Inline edit helpers
     function startInlineEdit(el) {
@@ -697,6 +788,7 @@
         span.addEventListener('dblclick', function() { startInlineEdit(span); });
         input.replaceWith(span);
     }
+
     </script>
 </body>
 </html>

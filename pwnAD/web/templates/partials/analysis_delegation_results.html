@@ -1,0 +1,184 @@
+{% if error %}
+<div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+    <div class="flex items-center gap-2 text-red-400 text-sm">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Delegation map error: {{ error }}</span>
+    </div>
+</div>
+{% elif not unconstrained and not constrained and not rbcd %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center">
+    <i class="fas fa-check-circle text-3xl text-green-400 mb-3"></i>
+    <p class="text-neutral-300 font-medium">No delegation configured</p>
+    <p class="text-neutral-500 text-sm mt-1">No Kerberos delegation found in the domain.</p>
+</div>
+{% else %}
+<!-- Summary Counts -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+            <i class="fas fa-unlock text-red-400"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold text-white">{{ unconstrained|length }}</div>
+            <div class="text-xs text-neutral-500">Unconstrained</div>
+        </div>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
+            <i class="fas fa-link text-orange-400"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold text-white">{{ constrained|length }}</div>
+            <div class="text-xs text-neutral-500">Constrained</div>
+        </div>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+            <i class="fas fa-arrows-turn-to-dots text-blue-400"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold text-white">{{ rbcd|length }}</div>
+            <div class="text-xs text-neutral-500">RBCD</div>
+        </div>
+    </div>
+</div>
+
+<!-- Unconstrained Delegation -->
+{% if unconstrained %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden">
+    <div class="px-4 py-3 border-b border-neutral-800 flex items-center gap-2">
+        <i class="fas fa-unlock text-red-400 text-sm"></i>
+        <span class="text-sm font-medium text-white">Unconstrained Delegation</span>
+        <span class="text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Critical</span>
+    </div>
+    <table class="min-w-full text-left text-sm">
+        <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-4 py-3 font-medium">Account</th>
+                <th class="px-4 py-3 font-medium">Type</th>
+                <th class="px-4 py-3 font-medium">DNS Name</th>
+                <th class="px-4 py-3 font-medium">Risk</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800/50">
+            {% for obj in unconstrained %}
+            <tr class="hover:bg-white/[0.02]">
+                <td class="px-4 py-3">
+                    <span class="text-white font-medium">{{ obj.sam }}</span>
+                </td>
+                <td class="px-4 py-3">
+                    {% if obj.type == 'computer' %}
+                    <span class="text-xs text-purple-400"><i class="fas fa-desktop mr-1"></i>Computer</span>
+                    {% else %}
+                    <span class="text-xs text-blue-400"><i class="fas fa-user mr-1"></i>User</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-xs text-neutral-400">{{ obj.dns }}</td>
+                <td class="px-4 py-3">
+                    <span class="text-xs text-red-400">Can capture any TGT</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Constrained Delegation -->
+{% if constrained %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden mt-3">
+    <div class="px-4 py-3 border-b border-neutral-800 flex items-center gap-2">
+        <i class="fas fa-link text-orange-400 text-sm"></i>
+        <span class="text-sm font-medium text-white">Constrained Delegation</span>
+        <span class="text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded">High</span>
+    </div>
+    <table class="min-w-full text-left text-sm">
+        <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-4 py-3 font-medium">Account</th>
+                <th class="px-4 py-3 font-medium">Type</th>
+                <th class="px-4 py-3 font-medium">Target SPNs</th>
+                <th class="px-4 py-3 font-medium">Protocol Transition</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800/50">
+            {% for obj in constrained %}
+            <tr class="hover:bg-white/[0.02]">
+                <td class="px-4 py-3">
+                    <span class="text-white font-medium">{{ obj.sam }}</span>
+                </td>
+                <td class="px-4 py-3">
+                    {% if obj.type == 'computer' %}
+                    <span class="text-xs text-purple-400"><i class="fas fa-desktop mr-1"></i>Computer</span>
+                    {% else %}
+                    <span class="text-xs text-blue-400"><i class="fas fa-user mr-1"></i>User</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex flex-col gap-1">
+                        {% for spn in obj.targets %}
+                        <span class="text-xs text-neutral-300 font-mono">{{ spn }}</span>
+                        {% endfor %}
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    {% if obj.protocol_transition %}
+                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">
+                        <i class="fas fa-exclamation-triangle mr-1"></i> T2A4D
+                    </span>
+                    {% else %}
+                    <span class="text-xs text-neutral-500">No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- RBCD -->
+{% if rbcd %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden mt-3">
+    <div class="px-4 py-3 border-b border-neutral-800 flex items-center gap-2">
+        <i class="fas fa-arrows-turn-to-dots text-blue-400 text-sm"></i>
+        <span class="text-sm font-medium text-white">Resource-Based Constrained Delegation (RBCD)</span>
+        <span class="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">Medium</span>
+    </div>
+    <table class="min-w-full text-left text-sm">
+        <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-4 py-3 font-medium">Target</th>
+                <th class="px-4 py-3 font-medium">Type</th>
+                <th class="px-4 py-3 font-medium">Allowed to Delegate</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800/50">
+            {% for obj in rbcd %}
+            <tr class="hover:bg-white/[0.02]">
+                <td class="px-4 py-3">
+                    <span class="text-white font-medium">{{ obj.sam }}</span>
+                </td>
+                <td class="px-4 py-3">
+                    {% if obj.type == 'computer' %}
+                    <span class="text-xs text-purple-400"><i class="fas fa-desktop mr-1"></i>Computer</span>
+                    {% else %}
+                    <span class="text-xs text-blue-400"><i class="fas fa-user mr-1"></i>User</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex flex-wrap gap-1">
+                        {% for p in obj.allowed_principals %}
+                        <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-neutral-800 text-neutral-300 border border-neutral-700">
+                            {{ p.name }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endif %}

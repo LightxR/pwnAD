@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Foreign Members{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">Foreign Members</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="p-6 flex flex-col gap-4">
+    <div class="flex items-center gap-3">
+        <h2 class="text-lg font-semibold text-white">Foreign & Cross-Domain Members</h2>
+    </div>
+
+    {% if error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Foreign Security Principals -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-user-secret text-orange-400"></i>
+                <span class="text-sm font-semibold text-white">Foreign Security Principals</span>
+                <span class="text-xs text-neutral-500">({{ foreign_users|length }})</span>
+            </div>
+        </div>
+        {% if foreign_users %}
+        <table class="min-w-full text-left text-sm" id="foreign-table">
+            <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-4 py-3 font-medium sortable">SID <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="px-4 py-3 font-medium">DN</th>
+                    <th class="px-4 py-3 font-medium">Member Of</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/50">
+                {% for f in foreign_users %}
+                <tr class="hover:bg-white/[0.02] transition">
+                    <td class="px-4 py-3 font-mono text-xs text-orange-400">{{ f.sid }}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-neutral-500 truncate max-w-xs">{{ f.dn }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-wrap gap-1">
+                            {% for g in f.member_of %}
+                            <a href="/object?dn={{ g|urlencode }}" class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="{{ g }}">
+                                {{ g.split(',')[0].replace('CN=', '') }}
+                            </a>
+                            {% endfor %}
+                            {% if not f.member_of %}
+                            <span class="text-neutral-600 text-xs">None</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-8 text-center text-neutral-500">
+            <i class="fas fa-check-circle text-2xl mb-2 block opacity-30"></i>
+            <p>No foreign security principals found from external domains</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Cross-Domain Group Members -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-users-between-lines text-purple-400"></i>
+                <span class="text-sm font-semibold text-white">Cross-Domain Group Members</span>
+                <span class="text-xs text-neutral-500">({{ cross_domain_members|length }})</span>
+            </div>
+        </div>
+        {% if cross_domain_members %}
+        <table class="min-w-full text-left text-sm" id="crossdomain-table">
+            <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-4 py-3 font-medium sortable">Local Group <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="px-4 py-3 font-medium">External Member DN</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/50">
+                {% for m in cross_domain_members %}
+                <tr class="hover:bg-white/[0.02] transition">
+                    <td class="px-4 py-3">
+                        <a href="/object?dn={{ m.group_dn|urlencode }}" class="text-white font-medium hover:text-red-400 transition">{{ m.group_name }}</a>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-neutral-400">{{ m.member_dn }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-8 text-center text-neutral-500">
+            <i class="fas fa-check-circle text-2xl mb-2 block opacity-30"></i>
+            <p>No cross-domain group members found</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Security Note -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <h3 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+            <i class="fas fa-shield-halved text-red-400"></i> Security Notes
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-neutral-400">
+            <div class="flex items-start gap-2">
+                <span class="w-2 h-2 rounded-full bg-orange-500 mt-1 shrink-0"></span>
+                <span><strong class="text-orange-400">Foreign Security Principals</strong> are objects from external trusted domains with access to this domain. Their SIDs belong to another domain, meaning compromise of that domain grants these privileges here.</span>
+            </div>
+            <div class="flex items-start gap-2">
+                <span class="w-2 h-2 rounded-full bg-purple-500 mt-1 shrink-0"></span>
+                <span><strong class="text-purple-400">Cross-Domain Members</strong> are principals from external domains directly added to local groups. This creates a trust dependency that may bypass SID filtering.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    initSortableTable('foreign-table');
+    initSortableTable('crossdomain-table');
+});
+</script>
+{% endblock %}

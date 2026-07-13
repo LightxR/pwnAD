@@ -1,92 +1,97 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - {{ cfg.label }}{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">{{ cfg.label }}</span>
+</nav>
+{% endblock %}
 {% block content %}
-<div class="p-6 h-full flex flex-col gap-4">
-    <!-- Search Panel -->
-    <div class="flex flex-col rounded-lg border border-neutral-800 bg-neutral-900">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-neutral-800">
-            <div class="flex items-center gap-2">
-                <i class="{{ cfg.icon }} text-red-500"></i>
-                <h2 class="text-lg font-semibold text-white">{{ cfg.label }}</h2>
-            </div>
-            {% if object_type in ['users', 'computers'] %}
-            <button id="create-btn"
-                hx-get="/api/create-form/{{ object_type }}"
-                hx-target="#create-form-container"
-                hx-swap="innerHTML"
-                class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">
-                <i class="fas fa-plus mr-1"></i> Create
-            </button>
-            {% endif %}
+<div class="p-6 flex flex-col gap-4">
+    <!-- Page Title + Count -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="{{ cfg.icon }} text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">{{ cfg.label }}</h2>
+            <span class="text-sm text-neutral-500" id="result-count">{{ pagination.total }} total</span>
+            <span id="search-spinner" class="htmx-indicator">
+                <i class="fas fa-circle-notch fa-spin text-red-500 text-sm"></i>
+            </span>
         </div>
-
-        <!-- Create Form Container -->
-        <div id="create-form-container"></div>
-
-        <!-- Filter Section -->
-        <div class="p-4 flex flex-col md:flex-row gap-4">
-            <!-- Identity Filter -->
-            <div class="flex-1">
-                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Search (sAMAccountName, CN, DN)</label>
-                <input type="search" id="search-input" name="q"
-                    value="{{ search }}"
-                    placeholder="e.g. admin, Domain Admins..."
-                    class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
-                    hx-get="/browse/{{ object_type }}"
-                    hx-target="#results-body"
-                    hx-trigger="input changed delay:300ms, search"
-                    hx-include="this"
-                    hx-indicator="#search-spinner"
-                    hx-select="#results-body"
-                    hx-swap="outerHTML">
-            </div>
-
-            {% if cfg.filters %}
-            <!-- Preset Filters -->
-            <div class="flex-shrink-0">
-                <label class="block text-xs font-medium text-neutral-400 mb-1.5">Quick Filters</label>
-                <div class="flex gap-2 flex-wrap">
-                    {% for f in cfg.filters %}
-                    <a href="/browse/{{ object_type }}{% if preset != f.key %}?preset={{ f.key }}{% endif %}"
-                       class="px-2.5 py-1.5 text-xs rounded-md border {% if preset == f.key %}border-red-500 bg-red-500/10 text-red-400{% else %}border-neutral-700 text-neutral-400 hover:bg-white/5 hover:text-white{% endif %} transition">
-                        {{ f.label }}
-                    </a>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-        </div>
+        {% if object_type in ['users', 'computers'] %}
+        <button id="create-btn"
+            hx-get="/api/create-form/{{ object_type }}"
+            hx-target="#create-form-container"
+            hx-swap="innerHTML"
+            class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-plus mr-1"></i> Create
+        </button>
+        {% endif %}
     </div>
 
-    <!-- Results Panel -->
-    <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
-        <!-- Results Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
-            <div class="flex items-center gap-3">
-                <span class="text-sm text-neutral-400">
-                    Total: <span class="text-white font-medium" id="result-count">{{ results|length }}</span>
-                </span>
-                <span id="search-spinner" class="htmx-indicator">
-                    <i class="fas fa-circle-notch fa-spin text-red-500 text-sm"></i>
-                </span>
-            </div>
-            <!-- Local filter -->
+    <!-- Create Form Container -->
+    <div id="create-form-container"></div>
+
+    <!-- Quick Filters -->
+    {% if cfg.filters %}
+    <div class="flex gap-2 flex-wrap items-center">
+        <a href="/browse/{{ object_type }}"
+           class="px-3 py-1.5 text-xs rounded-md font-medium {% if not preset %}bg-red-500/20 text-red-400 ring-1 ring-red-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %} transition">
+            All
+        </a>
+        {% for f in cfg.filters %}
+        <a href="/browse/{{ object_type }}{% if preset != f.key %}?preset={{ f.key }}{% endif %}"
+           class="px-3 py-1.5 text-xs rounded-md font-medium {% if preset == f.key %}bg-red-500/20 text-red-400 ring-1 ring-red-500/50{% else %}bg-neutral-800 text-neutral-400 hover:bg-neutral-700{% endif %} transition">
+            {{ f.label }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Search -->
+    <div>
+        <input type="search" id="search-input" name="q"
+            value="{{ search }}"
+            placeholder="Search by name, DN..."
+            class="w-full max-w-md rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50 focus:border-red-500"
+            hx-get="/browse/{{ object_type }}"
+            hx-target="#results-body"
+            hx-trigger="input changed delay:300ms, search"
+            hx-include="this"
+            hx-indicator="#search-spinner"
+            hx-select="#results-body"
+            hx-swap="outerHTML">
+    </div>
+
+    <!-- Results Table -->
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden">
+        <!-- Table Header with inline tools -->
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800">
             <input type="text" id="filter-results"
                 placeholder="Filter results..."
                 class="w-64 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
                 oninput="filterTable(this.value)">
+            <div class="flex gap-1">
+                <a href="/browse/{{ object_type }}/export?format=csv{% if search %}&q={{ search }}{% endif %}{% if preset %}&preset={{ preset }}{% endif %}"
+                   class="px-2 py-1.5 rounded-md border border-neutral-700 text-xs text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Export CSV">
+                    <i class="fas fa-file-csv"></i>
+                </a>
+                <a href="/browse/{{ object_type }}/export?format=json{% if search %}&q={{ search }}{% endif %}{% if preset %}&preset={{ preset }}{% endif %}"
+                   class="px-2 py-1.5 rounded-md border border-neutral-700 text-xs text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Export JSON">
+                    <i class="fas fa-file-code"></i>
+                </a>
+            </div>
         </div>
 
-        <!-- Table -->
-        <div class="flex-1 overflow-auto scrollbar">
+        <div>
             <table class="min-w-full text-left text-sm" id="results-table">
-                <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
+                <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
                     <tr>
-                        {% for attr in cfg.columns %}
-                        <th class="px-4 py-3 font-medium">{{ attr.label }}</th>
-                        {% endfor %}
-                        <th class="px-4 py-3 font-medium w-28"></th>
+                        <th class="px-4 py-3 font-medium sortable">Name <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="px-4 py-3 font-medium sortable">DN <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="px-4 py-3 font-medium">Tags</th>
+                        <th class="px-4 py-3 font-medium w-12"></th>
                     </tr>
                 </thead>
                 <tbody id="results-body" class="divide-y divide-neutral-800/50">
@@ -94,6 +99,8 @@
                 </tbody>
             </table>
         </div>
+
+        {% include "partials/pagination.html" %}
     </div>
 </div>
 
@@ -105,5 +112,6 @@ function filterTable(query) {
         row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
 }
+document.addEventListener('DOMContentLoaded', function() { initSortableTable('results-table'); });
 </script>
 {% endblock %}

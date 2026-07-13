@@ -312,20 +312,26 @@ Functions:
     constrained_delegation, unconstrained_delegation, RBCD, not_trusted_for_delegation
 
   Kerberos Attacks:
-    asreproastables, kerberoastables, spn
+    asreproastables, kerberoastables, spn, kerberoast, asreproast
 
   Credentials:
     laps, gmsa
 
   ADCS (Certificate Services):
-    adcs
+    adcs, adcs_req
+
+  Domain Trusts / Network:
+    trusts, gpos, foreign_members
+
+  Export:
+    bloodhound              Export to BloodHound CE format (zip)
 
   Recycle Bin:
     deleted                 List deleted objects from AD Recycle Bin
 
   Miscellaneous:
     owner, machine_quota, writable, protected_users, users_description,
-    passwords_dont_expire, users_with_admin_count, accounts_with_sid_histoy,
+    passwords_dont_expire, users_with_admin_count, accounts_with_sid_history,
     password_not_required"""
 
     parser_get = subparsers.add_parser(
@@ -397,11 +403,11 @@ Functions:
     get_password_not_required_parser = get_subparsers.add_parser('password_not_required', help="Retrieve accounts with PASSWD_NOTREQD set")
     all_subparsers.append(get_password_not_required_parser)
 
-    get_user_parser = get_subparsers.add_parser('groups', help="Retrieve user account information")
-    all_subparsers.append(get_user_parser)
-
-    get_groups_parser = get_subparsers.add_parser('protected_users', help="Retrieve all groups from domain")
+    get_groups_parser = get_subparsers.add_parser('groups', help="Retrieve all groups from domain")
     all_subparsers.append(get_groups_parser)
+
+    get_protected_users_parser = get_subparsers.add_parser('protected_users', help="Retrieve members of Protected Users group")
+    all_subparsers.append(get_protected_users_parser)
 
     get_users_description_parser = get_subparsers.add_parser('users_description', help="Retrieve all user accounts with description")
     all_subparsers.append(get_users_description_parser)
@@ -412,8 +418,8 @@ Functions:
     get_users_with_admin_count_parser = get_subparsers.add_parser('users_with_admin_count', help="Retrieve account with attribute adminaccount=1")
     all_subparsers.append(get_users_with_admin_count_parser)
 
-    get_accounts_with_sid_histoy_parser = get_subparsers.add_parser('accounts_with_sid_histoy', help="Retrieve accounts with SID history")
-    all_subparsers.append(get_accounts_with_sid_histoy_parser)
+    get_accounts_with_sid_history_parser = get_subparsers.add_parser('accounts_with_sid_history', help="Retrieve accounts with SID history")
+    all_subparsers.append(get_accounts_with_sid_history_parser)
 
     get_owner_parser = get_subparsers.add_parser('owner', help="Get the owner of a specified object")
     get_owner_parser.add_argument("target", action="store", help="Object you want to known the owner")
@@ -457,10 +463,49 @@ Functions:
     get_adcs_parser.add_argument("--no-ca-config", dest="ca_config", action="store_false", default=True, help="Don't try to get CA config via RRP")
     all_subparsers.append(get_adcs_parser)
 
+    get_adcs_req_parser = get_subparsers.add_parser('adcs_req', help="Request a certificate from ADCS (ESC1 exploitation)")
+    get_adcs_req_parser.add_argument("-ca", "--ca-name", dest="ca_name", required=True, help="CA name (e.g. CORP-CA)")
+    get_adcs_req_parser.add_argument("-template", "--template", dest="template", required=True, help="Certificate template name")
+    get_adcs_req_parser.add_argument("-upn", "--upn", dest="upn", default=None, help="UPN for SAN (e.g. administrator@domain.local)")
+    get_adcs_req_parser.add_argument("-dns", "--dns", dest="dns", default=None, help="DNS name for SAN")
+    get_adcs_req_parser.add_argument("-sid", "--sid", dest="sid", default=None, help="SID for SAN (strong cert mapping)")
+    get_adcs_req_parser.add_argument("-subject", "--subject", dest="subject", default=None, help="Custom subject DN (e.g. 'CN=Administrator')")
+    get_adcs_req_parser.add_argument("-ca-host", "--ca-host", dest="ca_host", default=None, help="CA hostname (auto-resolved if omitted)")
+    get_adcs_req_parser.add_argument("-key-size", "--key-size", dest="key_size", type=int, default=2048, help="RSA key size (default: 2048)")
+    get_adcs_req_parser.add_argument("-o", "--output", dest="output", default=None, help="Output PFX file path")
+    all_subparsers.append(get_adcs_req_parser)
+
     get_deleted_parser = get_subparsers.add_parser('deleted', help="List deleted objects from AD Recycle Bin")
     get_deleted_parser.add_argument("target", nargs="?", action="store", default=None, help="Optional target to search for (sAMAccountName, SID, or name pattern)")
     get_deleted_parser.add_argument("--otype", dest="otype", action="store", default="*", choices=["*", "user", "computer", "group"], help="Object type filter (default: all)")
     all_subparsers.append(get_deleted_parser)
+
+    get_trusts_parser = get_subparsers.add_parser('trusts', help="Enumerate domain trust relationships")
+    all_subparsers.append(get_trusts_parser)
+
+    get_gpos_parser = get_subparsers.add_parser('gpos', help="Enumerate Group Policy Objects and OU links")
+    all_subparsers.append(get_gpos_parser)
+
+    get_foreign_members_parser = get_subparsers.add_parser('foreign_members', help="Enumerate foreign security principals and cross-domain group members")
+    all_subparsers.append(get_foreign_members_parser)
+
+    get_kerberoast_parser = get_subparsers.add_parser('kerberoast', help="Request TGS hash(es) — one target or all kerberoastable accounts")
+    get_kerberoast_parser.add_argument("target", nargs="?", default=None, action="store", help="sAMAccountName (omit to roast all kerberoastable accounts)")
+    all_subparsers.append(get_kerberoast_parser)
+
+    get_asreproast_parser = get_subparsers.add_parser('asreproast', help="Request AS-REP hash(es) — one target or all AS-REP roastable accounts")
+    get_asreproast_parser.add_argument("target", nargs="?", default=None, action="store", help="sAMAccountName (omit to roast all AS-REP roastable accounts)")
+    all_subparsers.append(get_asreproast_parser)
+
+    get_bloodhound_parser = get_subparsers.add_parser('bloodhound', help="Export domain data to BloodHound CE format (zip)")
+    get_bloodhound_parser.add_argument("-o", "--output", dest="output_dir", action="store", default=".", help="Output directory (default: current directory)")
+    get_bloodhound_parser.add_argument("--prefix", dest="prefix", action="store", default="", help="Filename prefix for the output zip")
+    get_bloodhound_parser.add_argument("-c", "--collect", dest="collect", action="store", default=None,
+        help="Collection methods: all, dconly, or comma-separated list (group,objectprops,acl,trusts,container,session,localadmin,rdp,dcom,psremote,loggedon). Default: all")
+    get_bloodhound_parser.add_argument("-w", "--workers", dest="workers", type=int, default=10, help="Number of SMB worker threads (default: 10)")
+    get_bloodhound_parser.add_argument("-ns", "--nameserver", dest="nameserver", default=None, help="DNS server for hostname resolution (default: DC IP)")
+    get_bloodhound_parser.add_argument("--exclude-dcs", dest="exclude_dcs", action="store_true", default=False, help="Exclude domain controllers from computer enumeration")
+    all_subparsers.append(get_bloodhound_parser)
 
     # MODIFY action
     modify_description = """
@@ -469,7 +514,7 @@ Modify Active Directory object attributes.
 Functions:
   Credentials:   password
   Properties:    owner, computer_name, dontreqpreauth, attribute
-  Account:       disable_account, enable_account
+  Account:       disable_account, enable_account, unlock
   Recycle Bin:   restore_deleted"""
 
     parser_modify = subparsers.add_parser(
@@ -510,6 +555,10 @@ Functions:
     modify_enable_account_parser = modify_subparsers.add_parser('enable_account', help="Enable the targeted account")
     modify_enable_account_parser.add_argument("username", action="store", help="Account to be enabled")
     all_subparsers.append(modify_enable_account_parser)
+
+    modify_unlock_parser = modify_subparsers.add_parser('unlock', help="Unlock a locked-out account")
+    modify_unlock_parser.add_argument("target", action="store", help="sAMAccountName of the account to unlock")
+    all_subparsers.append(modify_unlock_parser)
 
     modify_attribute_parser = modify_subparsers.add_parser('attribute', help="Replace/set an attribute value on any LDAP object")
     modify_attribute_parser.add_argument("target", action="store", help="Target object (sAMAccountName, DN, or SID)")
@@ -677,6 +726,7 @@ Functions:
                                                                         'specified -identity should be provided. This allows impresonation of protected users '
                                                                         'and bypass of "Kerberos-only" constrained delegation restrictions. See CVE-2020-17049')
     parser_getst.add_argument('-renew', action='store_true', help='Sets the RENEW ticket option to renew the TGT used for authentication. Set -spn to \'krbtgt/DOMAINFQDN\'')
+    parser_getst.add_argument('-dmsa', action='store_true', help='Use DMSA (Delegated Managed Service Accounts)')
     all_subparsers.append(parser_getst)
 
 

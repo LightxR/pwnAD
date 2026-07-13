@@ -187,7 +187,8 @@ def start_interactive_mode(conn):
                             'u2u' : args.u2u,
                             'no_s4u2proxy' : args.no_s4u2proxy,
                             'force_forwardable' : args.force_forwardable,
-                            'renew' : args.renew
+                            'renew' : args.renew,
+                            'dmsa' : args.dmsa
         }
                     try:
                         authenticate = Authenticate(

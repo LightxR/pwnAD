@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Group Policy Objects{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">Group Policy Objects</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="p-6 flex flex-col gap-4">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <h2 class="text-lg font-semibold text-white">Group Policy Objects</h2>
+            <span class="text-sm text-neutral-500">({{ gpos|length }} found)</span>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+        <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    {% if gpos %}
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-x-auto">
+        <table class="min-w-full text-left text-sm" id="gpos-table">
+            <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-4 py-3 font-medium sortable">Name <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="px-4 py-3 font-medium">GUID</th>
+                    <th class="px-4 py-3 font-medium">Status</th>
+                    <th class="px-4 py-3 font-medium sortable">Linked To <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="px-4 py-3 font-medium">SYSVOL Path</th>
+                    <th class="px-4 py-3 font-medium sortable">Modified <i class="fas fa-sort sort-icon"></i></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/50">
+                {% for g in gpos %}
+                <tr class="hover:bg-white/[0.02] transition group cursor-pointer" onclick="window.location='/object?dn={{ g.dn|urlencode }}'">
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-white group-hover:text-red-400 transition">{{ g.name }}</div>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-neutral-500">{{ g.guid }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col gap-1">
+                            {% if g.user_disabled and g.computer_disabled %}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-400">All Disabled</span>
+                            {% elif g.user_disabled %}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/20 text-yellow-400">User Settings Disabled</span>
+                            {% elif g.computer_disabled %}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/20 text-yellow-400">Computer Settings Disabled</span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/20 text-green-400">Enabled</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if g.links %}
+                        <div class="flex flex-wrap gap-1">
+                            {% for link in g.links %}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium {% if link.enforced %}bg-red-500/20 text-red-400 border border-red-500/30{% else %}bg-neutral-700 text-neutral-300{% endif %}"
+                                title="{{ link.dn }}">
+                                {% if link.enforced %}<i class="fas fa-lock text-[8px]"></i>{% endif %}
+                                {{ link.ou }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-neutral-600 text-xs">Unlinked</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-neutral-500 truncate max-w-xs" title="{{ g.sysvol_path }}">{{ g.sysvol_path }}</td>
+                    <td class="px-4 py-3 text-neutral-500 text-xs">{{ g.modified }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="flex items-center justify-center h-64 text-neutral-500">
+        <div class="text-center">
+            <i class="fas fa-scroll text-4xl mb-3 opacity-30"></i>
+            <p>No Group Policy Objects found</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() { initSortableTable('gpos-table'); });
+</script>
+{% endblock %}

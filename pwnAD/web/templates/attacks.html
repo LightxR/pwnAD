@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - Attacks{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">Attacks</span>
+</nav>
+{% endblock %}
 {% block content %}
 <div class="p-6 h-full overflow-y-auto scrollbar">
     <div class="flex items-center gap-2 mb-6">
@@ -10,12 +17,16 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- DCSync -->
         <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-database text-red-500 mr-2"></i>DCSync</h3>
+            <h3 class="text-sm font-semibold text-white mb-1"><i class="fas fa-database text-red-500 mr-2"></i>DCSync<span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">Critical</span></h3>
+            <p class="text-xs text-neutral-500 mb-3">Replicate directory changes to extract password hashes (DS-Replication-Get-Changes-All).</p>
             <form onsubmit="return submitAttack(this, '/api/attack/dcsync')">
                 <div class="mb-3">
                     <label class="block text-xs text-neutral-400 mb-1">Principal (sAMAccountName)</label>
-                    <input type="text" name="principal" required placeholder="attacker_user"
-                        class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    <div class="flex gap-1">
+                        <input type="text" name="principal" required placeholder="attacker_user"
+                            class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <button type="button" onclick="pickPrincipal(this)" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                    </div>
                 </div>
                 <div class="flex gap-2">
                     <button type="submit" class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">Grant DCSync</button>
@@ -27,18 +38,25 @@
 
         <!-- GenericAll -->
         <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-star text-red-500 mr-2"></i>GenericAll</h3>
+            <h3 class="text-sm font-semibold text-white mb-1"><i class="fas fa-star text-red-500 mr-2"></i>GenericAll<span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">Critical</span></h3>
+            <p class="text-xs text-neutral-500 mb-3">Grant full control over a target object (read/write all properties, reset password, etc.).</p>
             <form onsubmit="return submitAttack(this, '/api/attack/generic-all')">
                 <div class="grid grid-cols-2 gap-2 mb-3">
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">Target</label>
-                        <input type="text" name="target" required placeholder="victim_user"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="target" required placeholder="victim_user"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this)" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">Principal</label>
-                        <input type="text" name="principal" required placeholder="attacker_user"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="principal" required placeholder="attacker_user"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this)" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -51,18 +69,25 @@
 
         <!-- RBCD -->
         <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-arrows-turn-to-dots text-red-500 mr-2"></i>RBCD</h3>
+            <h3 class="text-sm font-semibold text-white mb-1"><i class="fas fa-arrows-turn-to-dots text-red-500 mr-2"></i>RBCD<span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-400">High</span></h3>
+            <p class="text-xs text-neutral-500 mb-3">Configure Resource-Based Constrained Delegation to impersonate users on a target service.</p>
             <form onsubmit="return submitAttack(this, '/api/attack/rbcd')">
                 <div class="grid grid-cols-2 gap-2 mb-3">
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">Target Computer</label>
-                        <input type="text" name="target" required placeholder="DC01$"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="target" required placeholder="DC01$"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this, 'computer')" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">Grantee</label>
-                        <input type="text" name="grantee" required placeholder="EVIL$"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="grantee" required placeholder="EVIL$"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this)" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -75,13 +100,17 @@
 
         <!-- GPO DACL -->
         <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-scroll text-red-500 mr-2"></i>GPO DACL</h3>
+            <h3 class="text-sm font-semibold text-white mb-1"><i class="fas fa-scroll text-red-500 mr-2"></i>GPO DACL<span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-400">High</span></h3>
+            <p class="text-xs text-neutral-500 mb-3">Modify GPO permissions to gain control over Group Policy Objects applied to OUs.</p>
             <form onsubmit="return submitAttack(this, '/api/attack/gpo-dacl')">
                 <div class="grid grid-cols-2 gap-2 mb-3">
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">User</label>
-                        <input type="text" name="user" required placeholder="attacker_user"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="user" required placeholder="attacker_user"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this, 'user')" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">GPO GUID</label>
@@ -95,13 +124,17 @@
 
         <!-- UAC Flags -->
         <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 md:col-span-2">
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-flag text-red-500 mr-2"></i>UAC Flags</h3>
+            <h3 class="text-sm font-semibold text-white mb-1"><i class="fas fa-flag text-red-500 mr-2"></i>UAC Flags<span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">Medium</span></h3>
+            <p class="text-xs text-neutral-500 mb-3">Toggle UserAccountControl flags (DONT_REQ_PREAUTH, TRUSTED_FOR_DELEGATION, etc.) on a target account.</p>
             <form onsubmit="return submitAttack(this, '/api/attack/uac/add')">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
                     <div>
                         <label class="block text-xs text-neutral-400 mb-1">Target</label>
-                        <input type="text" name="target" required placeholder="victim_user"
-                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                        <div class="flex gap-1">
+                            <input type="text" name="target" required placeholder="victim_user"
+                                class="flex-1 rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                            <button type="button" onclick="pickPrincipal(this)" class="px-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:bg-white/5 transition" title="Search"><i class="fas fa-search text-xs"></i></button>
+                        </div>
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-xs text-neutral-400 mb-1">Flags (comma-separated)</label>
@@ -115,6 +148,46 @@
                         class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-white/5 transition">Remove Flags</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Related Queries -->
+    <div class="mt-2 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-search text-red-500"></i>
+            <h3 class="text-sm font-semibold text-white">Related Queries</h3>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <a href="/queries?filters=kerberoastables" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-fire text-orange-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">Kerberoastable accounts</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
+            <a href="/queries?filters=asreproastables" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-bolt text-yellow-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">AS-REP Roastable accounts</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
+            <a href="/queries?filters=unconstrained" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-unlock text-red-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">Unconstrained Delegation</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
+            <a href="/queries?filters=constrained" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-link text-blue-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">Constrained Delegation</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
+            <a href="/queries?filters=rbcd" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-arrows-turn-to-dots text-purple-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">RBCD Configured</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
+            <a href="/queries?filters=admin_count" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/50 hover:bg-neutral-800 transition group">
+                <i class="fas fa-shield-halved text-amber-400 w-4 text-center"></i>
+                <span class="text-xs text-neutral-400 group-hover:text-white transition">AdminCount=1</span>
+                <i class="fas fa-arrow-right text-[10px] text-neutral-600 ml-auto group-hover:text-red-400 transition"></i>
+            </a>
         </div>
     </div>
 </div>
@@ -131,6 +204,13 @@ function submitAttack(form, url) {
 
 function submitAttackBtn(form, url) {
     submitAttack(form, url);
+}
+
+function pickPrincipal(btn, typeFilter) {
+    var input = btn.closest('.flex').querySelector('input');
+    openSearchModal('Select Principal', typeFilter || null).then(function(sam) {
+        if (sam) input.value = sam;
+    });
 }
 </script>
 {% endblock %}

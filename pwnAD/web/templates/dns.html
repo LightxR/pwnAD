@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - DNS Records{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">DNS Records</span>
+</nav>
+{% endblock %}
 {% block content %}
 <div class="p-6 h-full flex flex-col gap-4">
     <!-- Zone Selection -->

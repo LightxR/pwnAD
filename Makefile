@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-unit test-integration test-all coverage lint format clean build
+.PHONY: help install install-dev test test-unit test-integration test-all coverage lint format clean build css
 
 help:
 	@echo "pwnAD Development Makefile"
@@ -85,7 +85,10 @@ clean:
 	find . -type f -name '*.ccache' -delete
 	@echo "Clean complete!"
 
-build: clean
+css:
+	npx tailwindcss -i pwnAD/web/static/src/input.css -o pwnAD/web/static/vendor/tailwind.min.css --minify
+
+build: clean css
 	python -m build
 
 # Example usage targets

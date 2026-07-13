@@ -2,7 +2,7 @@ import json
 import logging
 
 import ldap3
-from flask import Blueprint, request, jsonify, current_app, render_template
+from flask import Blueprint, request, jsonify, render_template
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 from ldap3.utils.conv import escape_filter_chars
 
@@ -10,11 +10,9 @@ from pwnAD.lib.utils import resolve_target, encode_ldap_value, check_error
 from pwnAD.lib.accesscontrol import UAC_NORMAL_ACCOUNT_ENABLED, UAC_WORKSTATION_TRUST
 from pwnAD.web.utils import LDAP_CONNECTION_ERRORS, ldap_search_with_retry
 
+from pwnAD.web.context import get_conn
+
 actions_bp = Blueprint('actions', __name__, url_prefix='/api')
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
 
 
 def _json_response(success, message, status=200, **extra):
@@ -23,9 +21,21 @@ def _json_response(success, message, status=200, **extra):
     return jsonify(data), status
 
 
+def _ensure_tls(conn):
+    lc = conn._ldap_connection
+    if lc.server.ssl or lc.tls_started:
+        return True
+    try:
+        conn.start_tls()
+        return True
+    except Exception as e:
+        logging.error(f"StartTLS failed: {e}")
+        return False
+
+
 @actions_bp.route('/attribute/add', methods=['POST'])
 def attribute_add():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     attr = request.form.get('attr', '').strip()
     value = request.form.get('value', '').strip()
@@ -46,7 +56,7 @@ def attribute_add():
 
 @actions_bp.route('/attribute/modify', methods=['POST'])
 def attribute_modify():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     attr = request.form.get('attr', '').strip()
     old_value = request.form.get('old_value', '').strip()
@@ -73,7 +83,7 @@ def attribute_modify():
 
 @actions_bp.route('/attribute/remove', methods=['POST'])
 def attribute_remove():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     attr = request.form.get('attr', '').strip()
     value = request.form.get('value', '').strip()
@@ -95,7 +105,7 @@ def attribute_remove():
 
 @actions_bp.route('/object/delete', methods=['POST'])
 def object_delete():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
 
     if not dn:
@@ -111,13 +121,16 @@ def object_delete():
 
 @actions_bp.route('/user/create', methods=['POST'])
 def user_create():
-    conn = _get_conn()
+    conn = get_conn()
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '').strip()
     ou = request.form.get('ou', '').strip()
 
     if not username or not password:
         return _json_response(False, 'Username and password required', 400)
+
+    if not _ensure_tls(conn):
+        return _json_response(False, 'Setting a password requires a secure channel (LDAPS or StartTLS) and StartTLS negotiation failed')
 
     if ou:
         container = ou if ou.lower().startswith('ou=') or ou.lower().startswith('cn=') else f"OU={ou},{conn._baseDN}"
@@ -147,7 +160,7 @@ def user_create():
 
 @actions_bp.route('/computer/create', methods=['POST'])
 def computer_create():
-    conn = _get_conn()
+    conn = get_conn()
     import random
     import string
 
@@ -162,6 +175,9 @@ def computer_create():
 
     if not password:
         password = ''.join(random.choice(string.ascii_letters + string.digits + '!@#$%') for _ in range(15))
+
+    if not _ensure_tls(conn):
+        return _json_response(False, 'Setting a password requires a secure channel (LDAPS or StartTLS) and StartTLS negotiation failed')
 
     computer_dn = f"CN={hostname},CN=Computers,{conn._baseDN}"
     spns = [
@@ -191,7 +207,7 @@ def computer_create():
 
 @actions_bp.route('/group/add-member', methods=['POST'])
 def group_add_member():
-    conn = _get_conn()
+    conn = get_conn()
     group_dn = request.form.get('group_dn', '').strip()
     member = request.form.get('member', '').strip()
 
@@ -212,7 +228,7 @@ def group_add_member():
 @actions_bp.route('/group/add-member-by-name', methods=['POST'])
 def group_add_member_by_name():
     """Add a member to a group using group sAMAccountName instead of DN."""
-    conn = _get_conn()
+    conn = get_conn()
     group = request.form.get('group', '').strip()
     member = request.form.get('member', '').strip()
 
@@ -235,7 +251,7 @@ def group_add_member_by_name():
 
 @actions_bp.route('/group/remove-member', methods=['POST'])
 def group_remove_member():
-    conn = _get_conn()
+    conn = get_conn()
     group_dn = request.form.get('group_dn', '').strip()
     member = request.form.get('member', '').strip()
 
@@ -255,12 +271,15 @@ def group_remove_member():
 
 @actions_bp.route('/user/password', methods=['POST'])
 def user_password():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     new_password = request.form.get('new_password', '').strip()
 
     if not dn or not new_password:
         return _json_response(False, 'Missing required fields', 400)
+
+    if not _ensure_tls(conn):
+        return _json_response(False, 'Changing a password requires a secure channel (LDAPS or StartTLS) and StartTLS negotiation failed')
 
     try:
         password_value = f'"{new_password}"'.encode('utf-16-le')
@@ -275,7 +294,7 @@ def user_password():
 
 @actions_bp.route('/user/toggle-state', methods=['POST'])
 def user_toggle_state():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     action = request.form.get('action', '').strip()
 
@@ -317,7 +336,7 @@ def user_toggle_state():
 
 @actions_bp.route('/owner/modify', methods=['POST'])
 def owner_modify():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     new_owner = request.form.get('new_owner', '').strip()
 
@@ -335,7 +354,7 @@ def owner_modify():
 
 @actions_bp.route('/computer/rename', methods=['POST'])
 def computer_rename():
-    conn = _get_conn()
+    conn = get_conn()
     current_name = request.form.get('current_name', '').strip()
     new_name = request.form.get('new_name', '').strip()
 
@@ -353,7 +372,7 @@ def computer_rename():
 
 @actions_bp.route('/user/dontreqpreauth', methods=['POST'])
 def user_dontreqpreauth():
-    conn = _get_conn()
+    conn = get_conn()
     account = request.form.get('account', '').strip()
     flag = request.form.get('flag', 'True').strip()
 
@@ -372,7 +391,7 @@ def user_dontreqpreauth():
 
 @actions_bp.route('/principals/search')
 def principals_search():
-    conn = _get_conn()
+    conn = get_conn()
     query = request.args.get('q', '').strip()
     type_filter = request.args.get('type', '').strip()  # Optional: user, group, computer
     if not query or len(query) < 2:
@@ -420,7 +439,7 @@ def principals_search():
 
 @actions_bp.route('/create-form/<object_type>')
 def create_form(object_type):
-    conn = _get_conn()
+    conn = get_conn()
     ctx = {
         'object_type': object_type,
         'domain': conn.domain,
@@ -432,7 +451,7 @@ def create_form(object_type):
 @actions_bp.route('/object/restore', methods=['POST'])
 def object_restore():
     """Restore a deleted object from the AD Recycle Bin."""
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     new_name = request.form.get('new_name', '').strip() or None
     new_parent = request.form.get('new_parent', '').strip() or None

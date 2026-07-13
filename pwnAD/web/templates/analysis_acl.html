@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - ACL Abuse Finder{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">ACL Abuse Finder</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="p-6 flex flex-col gap-4">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-spider text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">ACL Abuse Finder</h2>
+            <span id="scan-spinner" class="htmx-indicator">
+                <i class="fas fa-circle-notch fa-spin text-red-500 text-sm"></i>
+            </span>
+        </div>
+    </div>
+
+    <p class="text-sm text-neutral-400">
+        Scans object DACLs to find dangerous permissions (GenericAll, WriteDACL, WriteOwner, DCSync, etc.) held by non-default principals.
+    </p>
+
+    <!-- Scope Filter -->
+    <div class="flex items-center gap-3">
+        <span class="text-xs text-neutral-500 font-medium uppercase">Scope:</span>
+        <div class="flex gap-2" id="scope-buttons">
+            <button onclick="runAclScan('all')" class="scope-btn active px-3 py-1.5 text-xs rounded-md font-medium bg-red-500/20 text-red-400 ring-1 ring-red-500/50 transition" data-scope="all">All Objects</button>
+            <button onclick="runAclScan('users')" class="scope-btn px-3 py-1.5 text-xs rounded-md font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition" data-scope="users">Users</button>
+            <button onclick="runAclScan('computers')" class="scope-btn px-3 py-1.5 text-xs rounded-md font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition" data-scope="computers">Computers</button>
+            <button onclick="runAclScan('groups')" class="scope-btn px-3 py-1.5 text-xs rounded-md font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition" data-scope="groups">Groups</button>
+        </div>
+    </div>
+
+    <!-- Results Container -->
+    <div id="acl-results"
+         hx-get="/analysis/api/acl-abuse?scope=all"
+         hx-trigger="load"
+         hx-indicator="#scan-spinner">
+        <div class="flex items-center justify-center py-8 text-neutral-500">
+            <i class="fas fa-circle-notch fa-spin mr-2"></i> Scanning DACLs...
+        </div>
+    </div>
+</div>
+
+<script>
+function runAclScan(scope) {
+    var buttons = document.querySelectorAll('.scope-btn');
+    buttons.forEach(function(btn) {
+        if (btn.dataset.scope === scope) {
+            btn.className = 'scope-btn active px-3 py-1.5 text-xs rounded-md font-medium bg-red-500/20 text-red-400 ring-1 ring-red-500/50 transition';
+        } else {
+            btn.className = 'scope-btn px-3 py-1.5 text-xs rounded-md font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition';
+        }
+    });
+    htmx.ajax('GET', '/analysis/api/acl-abuse?scope=' + scope, {target: '#acl-results', indicator: '#scan-spinner'});
+}
+</script>
+{% endblock %}

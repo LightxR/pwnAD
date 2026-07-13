@@ -1,0 +1,45 @@
+<div class="text-2xl font-bold text-white">{{ domain }}</div>
+<div class="text-sm text-neutral-500 font-mono mt-1 mb-6">{{ base_dn }}</div>
+
+<div class="border-t border-neutral-800 pt-4">
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+        {% if machine_quota is defined and machine_quota != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Machine Quota</div>
+            <div class="text-lg font-bold {% if machine_quota|int > 0 %}text-orange-400{% else %}text-neutral-300{% endif %}">{{ machine_quota }}</div>
+        </div>
+        {% endif %}
+        {% if password_policy %}
+        {% if password_policy.min_length is defined and password_policy.min_length != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Min Password</div>
+            <div class="text-lg font-bold {% if password_policy.min_length|int < 12 %}text-yellow-400{% else %}text-neutral-300{% endif %}">{{ password_policy.min_length }} chars</div>
+        </div>
+        {% endif %}
+        {% if password_policy.history_length is defined and password_policy.history_length != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Pwd History</div>
+            <div class="text-lg font-bold text-neutral-300">{{ password_policy.history_length }}</div>
+        </div>
+        {% endif %}
+        {% if password_policy.complexity is defined and password_policy.complexity != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Complexity</div>
+            <div class="text-lg font-bold {% if password_policy.complexity %}text-green-400{% else %}text-red-400{% endif %}">{{ 'Enabled' if password_policy.complexity else 'Disabled' }}</div>
+        </div>
+        {% endif %}
+        {% if password_policy.lockout_threshold is defined and password_policy.lockout_threshold != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Lockout</div>
+            <div class="text-lg font-bold {% if password_policy.lockout_threshold|int == 0 %}text-red-400{% else %}text-neutral-300{% endif %}">{{ password_policy.lockout_threshold }} attempts</div>
+        </div>
+        {% endif %}
+        {% if password_policy.max_age_days is defined and password_policy.max_age_days != '?' %}
+        <div>
+            <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Max Pwd Age</div>
+            <div class="text-lg font-bold text-neutral-300">{{ password_policy.max_age_days }} days</div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>

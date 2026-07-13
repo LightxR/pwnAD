@@ -1,0 +1,42 @@
+<div class="space-y-1">
+    <a href="/queries?filters=kerberoastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-fire w-4 text-center text-orange-400"></i>
+        <span>Kerberoastable Accounts</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.kerberoastables }}</span>
+    </a>
+    <a href="/queries?filters=asreproastables" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-bolt w-4 text-center text-yellow-400"></i>
+        <span>AS-REP Roastable</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.asreproastables }}</span>
+    </a>
+    <a href="/queries?filters=unconstrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-unlock w-4 text-center text-red-400"></i>
+        <span>Unconstrained Delegation</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.unconstrained }}</span>
+    </a>
+    <a href="/queries?filters=constrained" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-link w-4 text-center text-blue-400"></i>
+        <span>Constrained Delegation</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.constrained }}</span>
+    </a>
+    <a href="/queries?filters=admin_count" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-shield-halved w-4 text-center text-pink-400"></i>
+        <span>AdminCount=1</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.admin_count }}</span>
+    </a>
+    <a href="/queries?filters=password_not_required" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-key w-4 text-center text-emerald-400"></i>
+        <span>PASSWD_NOTREQD</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.password_not_required }}</span>
+    </a>
+    <a href="/queries?filters=machine_accounts" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-server w-4 text-center text-indigo-400"></i>
+        <span>Machine Accounts</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.machine_accounts }}</span>
+    </a>
+    <a href="/queries?filters=protected_users" class="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-neutral-400 hover:bg-white/5 hover:text-white transition">
+        <i class="fas fa-user-shield w-4 text-center text-cyan-400"></i>
+        <span>Protected Users</span>
+        <span class="ml-auto text-xs bg-neutral-800 px-2 py-0.5 rounded text-neutral-400">{{ query_counts.protected_users }}</span>
+    </a>
+</div>

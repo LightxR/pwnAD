@@ -1,0 +1,128 @@
+{% if error %}
+<div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+    <div class="flex items-center gap-2 text-red-400 text-sm">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Scan error: {{ error }}</span>
+    </div>
+</div>
+{% elif not checks %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center">
+    <i class="fas fa-circle-notch fa-spin text-3xl text-neutral-600 mb-3"></i>
+    <p class="text-neutral-400">No checks returned</p>
+</div>
+{% else %}
+<!-- Summary Banner -->
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        {% if issues_count == 0 %}
+        <div class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+            <i class="fas fa-check text-green-400"></i>
+        </div>
+        <div>
+            <div class="text-white font-medium">All checks passed</div>
+            <div class="text-xs text-neutral-500">{{ checks|length }} checks completed</div>
+        </div>
+        {% else %}
+        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+            <i class="fas fa-triangle-exclamation text-red-400"></i>
+        </div>
+        <div>
+            <div class="text-white font-medium">{{ issues_count }} issue{{ 's' if issues_count != 1 }} found</div>
+            <div class="text-xs text-neutral-500">{{ checks|length }} checks completed</div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="flex gap-2">
+        {% set critical_count = checks|selectattr('severity', 'equalto', 'critical')|list|length %}
+        {% set high_count = checks|selectattr('severity', 'equalto', 'high')|list|length %}
+        {% set medium_count = checks|selectattr('severity', 'equalto', 'medium')|list|length %}
+        {% if critical_count %}
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400">
+            {{ critical_count }} Critical
+        </span>
+        {% endif %}
+        {% if high_count %}
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-orange-500/20 text-orange-400">
+            {{ high_count }} High
+        </span>
+        {% endif %}
+        {% if medium_count %}
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">
+            {{ medium_count }} Medium
+        </span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Check Cards -->
+<div class="flex flex-col gap-3 mt-3">
+    {% for check in checks %}
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                {% if check.severity == 'critical' %}
+                <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                {% elif check.severity == 'high' %}
+                <span class="w-2 h-2 rounded-full bg-orange-600"></span>
+                {% elif check.severity == 'medium' %}
+                <span class="w-2 h-2 rounded-full bg-yellow-600"></span>
+                {% elif check.severity == 'low' %}
+                <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                {% endif %}
+                <div>
+                    <div class="text-white font-medium text-sm">{{ check.name }}</div>
+                    <div class="text-xs text-neutral-500">{{ check.description }}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-mono
+                    {% if check.severity == 'ok' %}text-green-400
+                    {% elif check.severity == 'critical' %}text-red-400
+                    {% elif check.severity == 'high' %}text-orange-400
+                    {% elif check.severity == 'medium' %}text-yellow-400
+                    {% else %}text-blue-400{% endif %}">
+                    {{ check.value }}
+                </span>
+                {% if check.severity != 'ok' %}
+                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium uppercase
+                    {% if check.severity == 'critical' %}bg-red-500/20 text-red-400
+                    {% elif check.severity == 'high' %}bg-orange-500/20 text-orange-400
+                    {% elif check.severity == 'medium' %}bg-yellow-500/20 text-yellow-400
+                    {% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                    {{ check.severity }}
+                </span>
+                {% else %}
+                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">OK</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if check.severity != 'ok' %}
+        <div class="px-4 py-3 border-t border-neutral-800 bg-neutral-950/30">
+            <p class="text-xs text-neutral-400 mb-2">{{ check.detail }}</p>
+
+            {% if check.affected %}
+            <div class="flex flex-wrap gap-1 mb-2">
+                {% for item in check.affected %}
+                <a href="/browse?q={{ item|urlencode }}" class="inline-flex px-2 py-0.5 rounded text-xs bg-neutral-800 text-neutral-300 border border-neutral-700 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition cursor-pointer">{{ item }}</a>
+                {% endfor %}
+                {% if check.affected|length == 20 %}
+                <span class="text-xs text-neutral-500 ml-1">...</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if check.remediation %}
+            <div class="flex items-start gap-2 mt-2 pt-3 border-t border-neutral-800/50">
+                <i class="fas fa-wrench text-neutral-600 text-xs mt-1"></i>
+                <span class="text-xs text-neutral-500">{{ check.remediation }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

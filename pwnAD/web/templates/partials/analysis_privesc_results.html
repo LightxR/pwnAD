@@ -1,0 +1,76 @@
+{% if error %}
+<div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+    <div class="flex items-center gap-2 text-red-400 text-sm">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Analysis error: {{ error }}</span>
+    </div>
+</div>
+{% elif not paths %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center">
+    <i class="fas fa-shield-halved text-3xl text-green-400 mb-3"></i>
+    <p class="text-neutral-300 font-medium">No privilege escalation paths found</p>
+    <p class="text-neutral-500 text-sm mt-1">No direct paths to Domain Admin detected from the current user context ({{ user_sids_count }} SIDs checked).</p>
+</div>
+{% else %}
+<!-- Summary -->
+<div class="flex items-center gap-4 mb-2">
+    <span class="text-sm text-neutral-400">
+        <span class="text-white font-medium">{{ paths|length }}</span> escalation paths found
+        <span class="text-neutral-600 mx-1">|</span>
+        <span class="text-neutral-500">{{ user_sids_count }} user SIDs analyzed</span>
+    </span>
+</div>
+
+<!-- Paths List -->
+<div class="flex flex-col gap-3">
+    {% for path in paths %}
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-start gap-3">
+            <!-- Severity Badge -->
+            <div class="shrink-0 mt-1">
+                {% if path.severity == 'critical' %}
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-500/20">
+                    <i class="fas fa-skull text-red-400 text-xs"></i>
+                </span>
+                {% elif path.severity == 'high' %}
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/20">
+                    <i class="fas fa-bolt text-orange-400 text-xs"></i>
+                </span>
+                {% else %}
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500/20">
+                    <i class="fas fa-exclamation text-yellow-400 text-xs"></i>
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-white font-medium text-sm">{{ path.target }}</span>
+                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium
+                        {% if path.type == 'kerberoast' %}bg-purple-500/20 text-purple-400
+                        {% elif path.type == 'asreproast' %}bg-blue-500/20 text-blue-400
+                        {% elif path.type == 'acl' %}bg-orange-500/20 text-orange-400
+                        {% elif path.type == 'delegation' %}bg-blue-500/20 text-blue-400
+                        {% else %}bg-neutral-700 text-neutral-300{% endif %}">
+                        {{ path.type }}
+                    </span>
+                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium
+                        {% if path.severity == 'critical' %}bg-red-500/20 text-red-400
+                        {% elif path.severity == 'high' %}bg-orange-500/20 text-orange-400
+                        {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                        {{ path.severity }}
+                    </span>
+                </div>
+                <p class="text-sm text-neutral-400">{{ path.description }}</p>
+                {% if path.exploit %}
+                <div class="mt-2 flex items-start gap-2">
+                    <i class="fas fa-crosshairs text-red-400/50 text-xs mt-1"></i>
+                    <span class="text-xs text-neutral-500">{{ path.exploit }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

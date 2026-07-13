@@ -187,7 +187,7 @@
             <tbody>
                 {% for perm in template.enrollment_permissions %}
                 <tr class="border-b border-neutral-700/50">
-                    <td class="px-3 py-2 text-white">{{ perm.principal }}</td>
+                    <td class="px-3 py-2"><a href="/queries?search={{ perm.principal|urlencode }}" class="text-blue-400 hover:text-blue-300 hover:underline transition">{{ perm.principal }}</a></td>
                     <td class="px-3 py-2 text-neutral-300">{{ perm.right }}</td>
                 </tr>
                 {% endfor %}
@@ -215,7 +215,7 @@
             <tbody>
                 {% for perm in template.dangerous_permissions %}
                 <tr class="border-b border-orange-500/20">
-                    <td class="px-3 py-2 text-white">{{ perm.principal }}</td>
+                    <td class="px-3 py-2"><a href="/queries?search={{ perm.principal|urlencode }}" class="text-orange-300 hover:text-orange-200 hover:underline transition">{{ perm.principal }}</a></td>
                     <td class="px-3 py-2 text-orange-300">{{ perm.right }}</td>
                     <td class="px-3 py-2 text-neutral-400">{{ perm.issue }}</td>
                 </tr>

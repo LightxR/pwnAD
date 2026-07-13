@@ -1,27 +1,14 @@
 import logging
 
 import ldap3
-from flask import Blueprint, request, render_template, current_app, jsonify
+from flask import Blueprint, request, render_template, jsonify
 from ldap3.utils.conv import escape_filter_chars
 
 from pwnAD.lib.dns import DNSRecord, DNS_RECORD_TYPE, DNS_TYPE_CODE
+from pwnAD.web.context import get_conn, base_context
 from pwnAD.web.utils import LDAP_CONNECTION_ERRORS, ldap_search_with_retry
 
 dns_bp = Blueprint('dns', __name__)
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
-
-
-def _base_context(active_page='dns'):
-    conn = _get_conn()
-    return {
-        'domain': conn.domain,
-        'dc_ip': conn.target,
-        'session_user': getattr(conn, 'ldap_user', '') or getattr(conn, 'user', ''),
-        'active_page': active_page,
-    }
 
 
 def _get_dns_zones(conn):
@@ -89,8 +76,8 @@ def _get_dns_records(conn, zone_dn):
 
 @dns_bp.route('/dns')
 def dns_view():
-    conn = _get_conn()
-    ctx = _base_context('dns')
+    conn = get_conn()
+    ctx = base_context('dns')
 
     zones = _get_dns_zones(conn)
     ctx['zones'] = zones
@@ -119,7 +106,7 @@ def dns_view():
 
 @dns_bp.route('/dns/records')
 def dns_records():
-    conn = _get_conn()
+    conn = get_conn()
     zone = request.args.get('zone', '').strip()
 
     if not zone:
@@ -136,7 +123,7 @@ def dns_records():
 
 @dns_bp.route('/dns/record/add', methods=['POST'])
 def dns_record_add():
-    conn = _get_conn()
+    conn = get_conn()
     zone = request.form.get('zone', '').strip()
     name = request.form.get('name', '').strip()
     dnstype = request.form.get('type', 'A').strip()
@@ -164,7 +151,7 @@ def dns_record_add():
 
 @dns_bp.route('/dns/record/remove', methods=['POST'])
 def dns_record_remove():
-    conn = _get_conn()
+    conn = get_conn()
     zone = request.form.get('zone', '').strip()
     name = request.form.get('name', '').strip()
     data = request.form.get('data', '').strip() or None

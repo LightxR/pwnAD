@@ -1,7 +1,7 @@
 import logging
 from io import BytesIO
 
-from flask import Blueprint, request, render_template, current_app, jsonify, send_file
+from flask import Blueprint, request, render_template, jsonify, send_file
 
 from pwnAD.commands.shadow import (
     get_key_credentials, set_key_credentials, add_new_key_credential,
@@ -9,21 +9,9 @@ from pwnAD.commands.shadow import (
 )
 from pwnAD.lib.certificate import create_pfx
 
+from pwnAD.web.context import get_conn, base_context
+
 shadow_bp = Blueprint('shadow', __name__)
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
-
-
-def _base_context(active_page='shadow'):
-    conn = _get_conn()
-    return {
-        'domain': conn.domain,
-        'dc_ip': conn.target,
-        'session_user': getattr(conn, 'ldap_user', '') or getattr(conn, 'user', ''),
-        'active_page': active_page,
-    }
 
 
 def _list_key_credentials(conn, target):
@@ -51,13 +39,13 @@ def _list_key_credentials(conn, target):
 
 @shadow_bp.route('/shadow')
 def shadow_view():
-    ctx = _base_context('shadow')
+    ctx = base_context('shadow')
     target = request.args.get('target', '').strip()
     ctx['target'] = target
     ctx['credentials'] = None
 
     if target:
-        conn = _get_conn()
+        conn = get_conn()
         if not conn.exists(target):
             ctx['error'] = f'Target {target} not found'
         else:
@@ -72,7 +60,7 @@ def shadow_view():
 
 @shadow_bp.route('/shadow/list')
 def shadow_list():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.args.get('target', '').strip()
     if not target:
         return '<tr><td colspan="3" class="px-4 py-8 text-center text-neutral-500">Enter a target</td></tr>'
@@ -89,7 +77,7 @@ def shadow_list():
 
 @shadow_bp.route('/shadow/add', methods=['POST'])
 def shadow_add():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     if not target:
         return jsonify(success=False, message='Missing target'), 400
@@ -121,7 +109,7 @@ def shadow_add():
 
 @shadow_bp.route('/shadow/remove', methods=['POST'])
 def shadow_remove():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
     device_id = request.form.get('device_id', '').strip()
 
@@ -141,7 +129,7 @@ def shadow_remove():
 
 @shadow_bp.route('/shadow/clear', methods=['POST'])
 def shadow_clear():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
 
     if not target:
@@ -160,7 +148,7 @@ def shadow_clear():
 
 @shadow_bp.route('/shadow/auto', methods=['POST'])
 def shadow_auto_attack():
-    conn = _get_conn()
+    conn = get_conn()
     target = request.form.get('target', '').strip()
 
     if not target:

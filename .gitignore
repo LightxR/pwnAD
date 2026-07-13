@@ -204,6 +204,10 @@ test_local.py
 debug_*.py
 playground.py
 
+# Node.js (Tailwind CSS build)
+node_modules/
+package-lock.json
+
 # Others
 CLAUDE.md
 scripts/

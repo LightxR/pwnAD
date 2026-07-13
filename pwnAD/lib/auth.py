@@ -40,6 +40,7 @@ class Authenticate:
             no_s4u2proxy: Optional[bool] = None,
             force_forwardable: Optional[bool] = None,
             renew: Optional[bool] = None,
+            dmsa: Optional[bool] = None,
     ) -> None:
         self.domain = domain
         self.dc_ip = dc_ip
@@ -65,6 +66,7 @@ class Authenticate:
         self.no_s4u2proxy=no_s4u2proxy
         self.force_forwardable=force_forwardable
         self.renew=renew
+        self.dmsa=dmsa
 
         self.lmhash, self.nthash = None, None
         if self.hashes is not None:

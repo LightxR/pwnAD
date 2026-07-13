@@ -1,0 +1,251 @@
+<div class="space-y-4">
+    <!-- Hero -->
+    <div class="bg-neutral-900/50 rounded-2xl p-5">
+        <div class="flex flex-col lg:flex-row gap-5">
+            <!-- Score Ring -->
+            <div class="relative w-24 h-24 shrink-0 self-center lg:self-start">
+                <svg class="w-full h-full" viewBox="0 0 128 128" style="transform:rotate(-90deg)">
+                    <circle cx="64" cy="64" r="54" fill="none" stroke="#262626" stroke-width="7"/>
+                    <circle cx="64" cy="64" r="54" fill="none"
+                        stroke="{% if score >= 80 %}#4ade80{% elif score >= 50 %}#fbbf24{% else %}#ef4444{% endif %}"
+                        stroke-width="7" stroke-linecap="round"
+                        stroke-dasharray="{{ (score * 339.3 / 100)|round(1) }} 339.3"/>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span class="text-3xl font-black {% if score >= 80 %}text-green-400{% elif score >= 50 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ score }}</span>
+                    <span class="text-xs text-neutral-600 uppercase tracking-widest mt-0.5">score</span>
+                </div>
+            </div>
+
+            <!-- Domain + Counts -->
+            <div class="flex-1 min-w-0">
+                <h1 class="text-3xl font-bold text-white tracking-tight">{{ domain }}</h1>
+                <p class="text-sm text-neutral-600 font-mono mt-1">{{ base_dn }}</p>
+
+                <div class="grid grid-cols-5 gap-4 mt-4">
+                    <a href="/browse/users" class="group">
+                        <div class="text-2xl font-bold text-white group-hover:text-blue-400 transition">{{ counts.users }}</div>
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mt-1 group-hover:text-blue-400 transition">Users</div>
+                    </a>
+                    <a href="/browse/computers" class="group">
+                        <div class="text-2xl font-bold text-white group-hover:text-purple-400 transition">{{ counts.computers }}</div>
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mt-1 group-hover:text-purple-400 transition">Computers</div>
+                    </a>
+                    <a href="/browse/groups" class="group">
+                        <div class="text-2xl font-bold text-white group-hover:text-green-400 transition">{{ counts.groups }}</div>
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mt-1 group-hover:text-green-400 transition">Groups</div>
+                    </a>
+                    <a href="/browse/ous" class="group">
+                        <div class="text-2xl font-bold text-white group-hover:text-amber-400 transition">{{ counts.ous }}</div>
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mt-1 group-hover:text-amber-400 transition">OUs</div>
+                    </a>
+                    <a href="/queries?filters=admin_count" class="group">
+                        <div class="text-2xl font-bold text-white group-hover:text-red-400 transition">{{ counts.privileged }}</div>
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mt-1 group-hover:text-red-400 transition">Privileged</div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Findings -->
+            <div class="shrink-0 lg:w-56">
+                <div class="text-xs font-semibold uppercase tracking-wider {% if score >= 80 %}text-green-400{% elif score >= 50 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                    {% if score >= 80 %}Good posture{% elif score >= 50 %}Needs attention{% else %}At risk{% endif %}
+                </div>
+                <div class="text-xs text-neutral-600 mt-0.5">{{ total_checks }} checks &middot; {{ findings|length }} finding{{ 's' if findings|length != 1 }}</div>
+                <div class="mt-2 space-y-1">
+                    {% for f in findings[:5] %}
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full shrink-0
+                            {% if f.severity == 'critical' %}bg-red-500{% elif f.severity == 'high' %}bg-orange-500{% else %}bg-yellow-500{% endif %}"></span>
+                        <span class="text-xs text-neutral-400">{{ f.name }}</span>
+                    </div>
+                    {% endfor %}
+                    {% if findings|length > 5 %}
+                    <div class="text-xs text-neutral-600">+{{ findings|length - 5 }} more</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Attack Surface -->
+        <div>
+            <div class="flex items-center justify-between mb-2 px-1">
+                <span class="text-xs text-neutral-600 uppercase tracking-wider font-medium">Attack Surface</span>
+                <a href="/analysis/misconfig" class="text-xs text-neutral-600 hover:text-neutral-400 transition">Full scan &rarr;</a>
+            </div>
+            <div class="bg-neutral-900/50 rounded-2xl overflow-hidden divide-y divide-neutral-800/50">
+                <a href="/queries?filters=kerberoastables" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-fire text-orange-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">Kerberoastable</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.kerberoastable > 0 %}text-orange-400{% else %}text-neutral-600{% endif %}">{{ surface.kerberoastable }}</span>
+                </a>
+                <a href="/queries?filters=asreproastables" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-bolt text-yellow-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">AS-REP Roastable</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.asreproastable > 0 %}text-yellow-400{% else %}text-neutral-600{% endif %}">{{ surface.asreproastable }}</span>
+                </a>
+                <a href="/queries?filters=unconstrained" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-unlock text-red-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">Unconstrained Delegation</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.unconstrained > 0 %}text-red-400{% else %}text-neutral-600{% endif %}">{{ surface.unconstrained }}</span>
+                </a>
+                <a href="/queries?filters=constrained" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-link text-blue-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">Constrained Delegation</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.constrained > 0 %}text-blue-400{% else %}text-neutral-600{% endif %}">{{ surface.constrained }}</span>
+                </a>
+                <a href="/queries?filters=rbcd" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-arrows-turn-to-dots text-purple-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">RBCD</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.rbcd > 0 %}text-purple-400{% else %}text-neutral-600{% endif %}">{{ surface.rbcd }}</span>
+                </a>
+                <a href="/queries?filters=password_not_required" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-key text-emerald-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">Password Not Required</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.passwd_notreqd > 0 %}text-emerald-400{% else %}text-neutral-600{% endif %}">{{ surface.passwd_notreqd }}</span>
+                </a>
+                <a href="/queries?filters=laps" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-lock-open text-green-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">LAPS Readable</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.laps_readable > 0 %}text-green-400{% else %}text-neutral-600{% endif %}">{{ surface.laps_readable }}</span>
+                </a>
+                <a href="/writable" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-pen text-pink-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">Writable Objects</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.writable > 0 %}text-pink-400{% else %}text-neutral-600{% endif %}">{{ surface.writable }}</span>
+                </a>
+                <a href="/analysis/adcs-scan" class="flex items-center justify-between px-5 py-2.5 hover:bg-neutral-800/30 transition group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
+                            <i class="fas fa-certificate text-rose-400 text-sm"></i>
+                        </span>
+                        <span class="text-sm text-neutral-300 group-hover:text-white transition">ADCS Vulnerable</span>
+                    </div>
+                    <span class="text-xl font-bold tabular-nums {% if surface.adcs_vulnerable > 0 %}text-rose-400{% else %}text-neutral-600{% endif %}">{{ surface.adcs_vulnerable }}</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-4">
+            <!-- Domain Configuration -->
+            <div>
+                <span class="text-xs text-neutral-600 uppercase tracking-wider font-medium px-1 block mb-2">Domain Configuration</span>
+                <div class="bg-neutral-900/50 rounded-2xl p-4 divide-y divide-neutral-800/50">
+                    <div class="flex items-center justify-between py-2 first:pt-0">
+                        <span class="text-sm text-neutral-400">Machine Quota</span>
+                        <span class="text-sm font-mono font-semibold {% if machine_quota != '?' and machine_quota|int > 0 %}text-orange-400{% else %}text-neutral-300{% endif %}">{{ machine_quota }}</span>
+                    </div>
+                    {% if password_policy %}
+                    {% if password_policy.min_length is defined and password_policy.min_length != '?' %}
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-sm text-neutral-400">Min Password Length</span>
+                        <span class="text-sm font-mono font-semibold {% if password_policy.min_length|int < 12 %}text-yellow-400{% else %}text-green-400{% endif %}">{{ password_policy.min_length }}</span>
+                    </div>
+                    {% endif %}
+                    {% if password_policy.history_length is defined and password_policy.history_length != '?' %}
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-sm text-neutral-400">Password History</span>
+                        <span class="text-sm font-mono font-semibold text-neutral-300">{{ password_policy.history_length }}</span>
+                    </div>
+                    {% endif %}
+                    {% if password_policy.complexity is defined and password_policy.complexity != '?' %}
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-sm text-neutral-400">Complexity Required</span>
+                        <span class="text-sm font-semibold {% if password_policy.complexity %}text-green-400{% else %}text-red-400{% endif %}">{{ 'Enabled' if password_policy.complexity else 'Disabled' }}</span>
+                    </div>
+                    {% endif %}
+                    {% if password_policy.lockout_threshold is defined and password_policy.lockout_threshold != '?' %}
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-sm text-neutral-400">Lockout Threshold</span>
+                        <span class="text-sm font-mono font-semibold {% if password_policy.lockout_threshold|int == 0 %}text-red-400{% else %}text-neutral-300{% endif %}">{{ password_policy.lockout_threshold }}{% if password_policy.lockout_threshold|int == 0 %} <span class="text-xs text-red-400/60">None</span>{% endif %}</span>
+                    </div>
+                    {% endif %}
+                    {% if password_policy.max_age_days is defined and password_policy.max_age_days != '?' %}
+                    <div class="flex items-center justify-between py-2 last:pb-0">
+                        <span class="text-sm text-neutral-400">Max Password Age</span>
+                        <span class="text-sm font-mono font-semibold text-neutral-300">{{ password_policy.max_age_days }}d</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Infrastructure -->
+            <div>
+                <span class="text-xs text-neutral-600 uppercase tracking-wider font-medium px-1 block mb-2">Infrastructure</span>
+                <div class="bg-neutral-900/50 rounded-2xl overflow-hidden">
+                    <!-- Domain Controllers -->
+                    <div class="p-4 {% if cas %}border-b border-neutral-800/50{% endif %}">
+                        <div class="text-xs text-neutral-600 uppercase tracking-wider mb-2">Domain Controllers</div>
+                        <div class="space-y-2">
+                            {% for dc in dcs %}
+                            <div>
+                                <div class="text-sm font-semibold text-white">{{ dc.name }}</div>
+                                <div class="text-xs text-neutral-600 font-mono mt-0.5 truncate">{{ dc.dns }}</div>
+                            </div>
+                            {% else %}
+                            <div class="text-sm text-neutral-600">No DCs found</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <!-- Certificate Authorities -->
+                    <div class="p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-neutral-600 uppercase tracking-wider">Certificate Authorities</span>
+                            <a href="/adcs" class="text-xs text-neutral-600 hover:text-neutral-400 transition">View All</a>
+                        </div>
+                        <div class="space-y-2">
+                            {% for ca in cas %}
+                            <a href="/adcs" class="block group">
+                                <div class="flex items-center justify-between">
+                                    <div class="text-sm font-semibold text-white group-hover:text-teal-400 transition">{{ ca.name }}</div>
+                                    <span class="text-xs text-neutral-500">{{ ca.templates_count }} templates</span>
+                                </div>
+                                <div class="text-xs text-neutral-600 font-mono mt-0.5 truncate">{{ ca.dns_host }}</div>
+                            </a>
+                            {% else %}
+                            <div class="text-sm text-neutral-600">No CAs found</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

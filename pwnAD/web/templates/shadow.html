@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - Shadow Credentials{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">Shadow Credentials</span>
+</nav>
+{% endblock %}
 {% block content %}
 <div class="p-6 h-full flex flex-col gap-4">
     <!-- Search Panel -->
@@ -62,7 +69,7 @@
     <!-- Credentials Table -->
     <div class="flex-1 flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 min-h-0">
         <div class="flex items-center px-4 py-3 border-b border-neutral-800">
-            <span class="text-sm text-neutral-400">Key Credentials for <span class="text-white">{{ target }}</span></span>
+            <span class="text-sm text-neutral-400">Key Credentials for <a href="/queries?search={{ target|urlencode }}" class="text-white hover:text-red-400 transition">{{ target }}</a></span>
         </div>
         <div class="flex-1 overflow-auto scrollbar">
             <table class="min-w-full text-left text-sm">

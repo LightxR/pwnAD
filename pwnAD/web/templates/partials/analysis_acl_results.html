@@ -1,0 +1,73 @@
+{% if error %}
+<div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+    <div class="flex items-center gap-2 text-red-400 text-sm">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Scan error: {{ error }}</span>
+    </div>
+</div>
+{% elif not results %}
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center">
+    <i class="fas fa-check-circle text-3xl text-green-400 mb-3"></i>
+    <p class="text-neutral-300 font-medium">No dangerous ACLs found</p>
+    <p class="text-neutral-500 text-sm mt-1">Scanned {{ total_scanned }} objects — no non-default principals hold dangerous permissions.</p>
+</div>
+{% else %}
+<!-- Summary -->
+<div class="flex items-center gap-4 mb-2">
+    <span class="text-sm text-neutral-400">
+        <span class="text-white font-medium">{{ results|length }}</span> objects with abusable ACLs
+        <span class="text-neutral-600 mx-1">|</span>
+        <span class="text-neutral-500">{{ total_scanned }} objects scanned</span>
+    </span>
+</div>
+
+<!-- Results Table -->
+<div class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden">
+    <table class="min-w-full text-left text-sm">
+        <thead class="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-4 py-3 font-medium">Target</th>
+                <th class="px-4 py-3 font-medium">Type</th>
+                <th class="px-4 py-3 font-medium">Trustee</th>
+                <th class="px-4 py-3 font-medium">Dangerous Rights</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800/50">
+            {% for item in results %}
+            {% for ace in item.aces %}
+            <tr class="hover:bg-white/[0.02]">
+                <td class="px-4 py-3">
+                    <div class="text-white font-medium">{{ item.target }}</div>
+                    <div class="text-xs text-neutral-500 truncate max-w-xs">{{ item.target_dn }}</div>
+                </td>
+                <td class="px-4 py-3">
+                    {% if item.target_type == 'user' %}
+                    <span class="inline-flex items-center gap-1 text-xs text-blue-400"><i class="fas fa-user"></i> User</span>
+                    {% elif item.target_type == 'computer' %}
+                    <span class="inline-flex items-center gap-1 text-xs text-purple-400"><i class="fas fa-desktop"></i> Computer</span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1 text-xs text-green-400"><i class="fas fa-users"></i> Group</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="text-orange-400 font-medium text-xs">{{ ace.trustee }}</span>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex flex-wrap gap-1">
+                        {% for right in ace.rights %}
+                        <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium
+                            {% if right in ['GenericAll', 'FullControl', 'DCSync'] %}bg-red-500/20 text-red-400
+                            {% elif right in ['WriteDacl', 'WriteOwner'] %}bg-orange-500/20 text-orange-400
+                            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                            {{ right }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

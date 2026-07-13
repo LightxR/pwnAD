@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - Privilege Escalation Paths{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">Privilege Escalation Paths</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="p-6 flex flex-col gap-4">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-route text-red-500"></i>
+            <h2 class="text-lg font-semibold text-white">Privilege Escalation Paths</h2>
+            <span id="scan-spinner" class="htmx-indicator">
+                <i class="fas fa-circle-notch fa-spin text-red-500 text-sm"></i>
+            </span>
+        </div>
+        <button onclick="htmx.ajax('GET', '/analysis/api/privesc', {target: '#privesc-results', indicator: '#scan-spinner'})"
+                class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 transition">
+            <i class="fas fa-sync-alt mr-1"></i> Rescan
+        </button>
+    </div>
+
+    <p class="text-sm text-neutral-400">
+        Discovers paths from the current user to Domain Admin by analyzing ACLs, Kerberoastable admins, AS-REP roastable accounts, and delegation chains.
+    </p>
+
+    <!-- Results Container -->
+    <div id="privesc-results"
+         hx-get="/analysis/api/privesc"
+         hx-trigger="load"
+         hx-indicator="#scan-spinner">
+        <div class="flex items-center justify-center py-8 text-neutral-500">
+            <i class="fas fa-circle-notch fa-spin mr-2"></i> Analyzing privilege escalation paths...
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,42 +1,64 @@
 {% for item in results %}
-<tr class="hover:bg-white/[0.02] transition">
-    {% for col in cfg.columns %}
-    <td class="px-4 py-2.5 text-neutral-300">
-        {% set val = item.attributes.get(col.attr, '') %}
-        {% if loop.first %}
-            <a href="/object?dn={{ item.dn|urlencode }}" class="hover:text-blue-400 transition">
-        {% endif %}
-        {% if val is iterable and val is not string %}
-            {% if val|length > 3 %}
-                {{ val[:3]|join(', ') }} <span class="text-neutral-500 text-xs">+{{ val|length - 3 }}</span>
-            {% elif val|length == 0 %}
-                <span class="text-neutral-600">-</span>
-            {% else %}
-                {{ val|join(', ') }}
-            {% endif %}
-        {% elif val %}
-            {{ val }}
-        {% else %}
-            <span class="text-neutral-600">-</span>
-        {% endif %}
-        {% if loop.first %}
-            </a>
-        {% endif %}
-    </td>
-    {% endfor %}
-    <td class="px-4 py-2.5 flex items-center gap-3 justify-end">
-        <a href="/object?dn={{ item.dn|urlencode }}" class="text-xs text-blue-400 hover:text-blue-300 transition" title="View details">
-            <i class="fas fa-arrow-right"></i>
+<tr class="group hover:bg-white/[0.02] transition cursor-pointer" onclick="window.location='/object?dn={{ item.dn|urlencode }}'">
+    <!-- Name -->
+    <td class="px-4 py-2.5">
+        <a href="/object?dn={{ item.dn|urlencode }}" class="no-underline text-white font-medium group-hover:text-red-400 transition" onclick="event.stopPropagation()">
+            {{ item.attributes.get('sAMAccountName', '') or item.attributes.get('name', '') or item.dn.split(',')[0] }}
         </a>
-        <button onclick='deleteObject({{ item.dn|tojson }})'
-            class="text-xs text-red-400/50 hover:text-red-400 transition" title="Delete object">
+    </td>
+    <!-- DN -->
+    <td class="px-4 py-2.5 font-mono text-xs text-neutral-500 truncate max-w-md">{{ item.dn }}</td>
+    <!-- Tags -->
+    <td class="px-4 py-2.5">
+        <div class="flex flex-wrap gap-1">
+        {% set uac = item.attributes.get('userAccountControl', 0)|int %}
+        {% set spns = item.attributes.get('servicePrincipalName', []) %}
+        {% set has_spn = spns and (spns is string or spns|length > 0) %}
+        {% set admin_count = item.attributes.get('adminCount', None) %}
+        {% set is_admin = admin_count is not none and admin_count|string == '1' %}
+        {% set obj_class = item.attributes.get('objectClass', []) %}
+        {% set is_user = 'user' in obj_class or 'person' in obj_class %}
+        {% set is_computer = 'computer' in obj_class %}
+        {% set dont_req_preauth = (uac // 4194304) % 2 == 1 %}
+        {% set trusted_for_delegation = (uac // 524288) % 2 == 1 %}
+        {% set trusted_to_auth = (uac // 16777216) % 2 == 1 %}
+        {% set rbcd_attr = item.attributes.get('msDS-AllowedToActOnBehalfOfOtherIdentity', None) %}
+        {% set has_rbcd = rbcd_attr is not none and rbcd_attr %}
+        {% set is_disabled = (uac // 2) % 2 == 1 %}
+        {% if has_spn and is_user %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/20 text-orange-400" title="Has SPN - Kerberoastable">Kerberoastable</span>
+        {% endif %}
+        {% if dont_req_preauth %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/20 text-yellow-400" title="DONT_REQ_PREAUTH">AS-REP</span>
+        {% endif %}
+        {% if trusted_for_delegation %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-400" title="Unconstrained Delegation">Unconstrained</span>
+        {% endif %}
+        {% if trusted_to_auth %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-400" title="Constrained Delegation">Constrained</span>
+        {% endif %}
+        {% if has_rbcd %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400" title="RBCD Configured">RBCD</span>
+        {% endif %}
+        {% if is_admin %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400" title="AdminCount=1">AdminCount</span>
+        {% endif %}
+        {% if is_disabled %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-700 text-neutral-400" title="Account Disabled">Disabled</span>
+        {% endif %}
+        </div>
+    </td>
+    <!-- Delete (hover-only) -->
+    <td class="px-4 py-2.5 text-right">
+        <button onclick='event.stopPropagation(); deleteObject({{ item.dn|tojson }})'
+            class="text-xs text-red-400/30 hover:text-red-400 transition opacity-0 group-hover:opacity-100" title="Delete object">
             <i class="fas fa-trash"></i>
         </button>
     </td>
 </tr>
 {% else %}
 <tr>
-    <td colspan="{{ cfg.columns|length + 1 }}" class="px-4 py-8 text-center text-neutral-500">
+    <td colspan="4" class="px-4 py-8 text-center text-neutral-500">
         <i class="fas fa-magnifying-glass text-2xl mb-2 block"></i>
         No results found
     </td>

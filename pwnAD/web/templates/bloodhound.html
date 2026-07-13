@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}pwnAD - BloodHound Export{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">BloodHound Export</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="p-6 h-full overflow-y-auto scrollbar">
+    <div class="flex items-center gap-2 mb-6">
+        <i class="fas fa-droplet text-red-500"></i>
+        <h2 class="text-lg font-semibold text-white">BloodHound CE Export</h2>
+        <span class="px-2 py-0.5 rounded text-xs font-medium bg-neutral-800 text-neutral-400">bloodhound-ce v6</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Left: Collection config -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Presets -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-layer-group text-red-500 mr-2"></i>Collection Preset</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <button onclick="setPreset('all')" id="preset-all"
+                        class="preset-btn active flex flex-col items-start gap-1 p-3 rounded-lg border border-red-500/50 bg-red-500/10 text-left transition hover:bg-red-500/20">
+                        <span class="text-sm font-semibold text-white">All</span>
+                        <span class="text-xs text-neutral-400">LDAP + SMB sessions + local groups</span>
+                    </button>
+                    <button onclick="setPreset('dconly')" id="preset-dconly"
+                        class="preset-btn flex flex-col items-start gap-1 p-3 rounded-lg border border-neutral-700 bg-neutral-800/50 text-left transition hover:bg-neutral-800">
+                        <span class="text-sm font-semibold text-white">DC Only</span>
+                        <span class="text-xs text-neutral-400">LDAP only — no SMB connections</span>
+                    </button>
+                    <button onclick="setPreset('custom')" id="preset-custom"
+                        class="preset-btn flex flex-col items-start gap-1 p-3 rounded-lg border border-neutral-700 bg-neutral-800/50 text-left transition hover:bg-neutral-800">
+                        <span class="text-sm font-semibold text-white">Custom</span>
+                        <span class="text-xs text-neutral-400">Pick individual methods</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Individual methods -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4" id="methods-panel">
+                <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-list-check text-red-500 mr-2"></i>Collection Methods</h3>
+
+                <div class="mb-3">
+                    <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">LDAP Collection</div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="group" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Group</div>
+                                <div class="text-[10px] text-neutral-500">Memberships</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="objectprops" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Object Props</div>
+                                <div class="text-[10px] text-neutral-500">User/computer attributes</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="acl" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">ACL</div>
+                                <div class="text-[10px] text-neutral-500">Security descriptors</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="trusts" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Trusts</div>
+                                <div class="text-[10px] text-neutral-500">Domain trust relationships</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="container" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Container</div>
+                                <div class="text-[10px] text-neutral-500">OUs, GPOs, containers</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">SMB/RPC Collection <span class="text-neutral-600 normal-case font-normal">(requires network access to targets)</span></div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="session" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Session</div>
+                                <div class="text-[10px] text-neutral-500">NetSessionEnum</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="localadmin" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Local Admin</div>
+                                <div class="text-[10px] text-neutral-500">SAMR local admins</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="rdp" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">RDP</div>
+                                <div class="text-[10px] text-neutral-500">Remote Desktop users</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="dcom" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">DCOM</div>
+                                <div class="text-[10px] text-neutral-500">Distributed COM users</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="psremote" checked class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">PS Remote</div>
+                                <div class="text-[10px] text-neutral-500">PowerShell Remoting</div>
+                            </div>
+                        </label>
+                        <label class="method-toggle flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition">
+                            <input type="checkbox" name="method" value="loggedon" class="accent-red-500 w-3.5 h-3.5">
+                            <div>
+                                <div class="text-xs font-medium text-white">Loggedon</div>
+                                <div class="text-[10px] text-neutral-500">NetWkstaUserEnum</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-sliders text-red-500 mr-2"></i>Options</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">DNS Server</label>
+                        <input type="text" id="opt-nameserver" value="" placeholder="DC IP (default)"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Workers</label>
+                        <input type="number" id="opt-workers" value="10" min="1" max="50"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">Filename prefix</label>
+                        <input type="text" id="opt-prefix" value="" placeholder="optional"
+                            class="w-full rounded-md border border-neutral-700 bg-neutral-950/50 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-red-500/50">
+                    </div>
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-2 px-3 py-2 cursor-pointer">
+                            <input type="checkbox" id="opt-exclude-dcs" class="accent-red-500 w-3.5 h-3.5">
+                            <span class="text-xs text-neutral-300">Exclude DCs</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Actions + status -->
+        <div class="space-y-4">
+
+            <!-- Export button -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <button onclick="startExport()" id="export-btn"
+                    class="w-full rounded-lg bg-red-500 px-4 py-3 text-sm font-semibold text-white hover:bg-red-400 transition flex items-center justify-center gap-2">
+                    <i class="fas fa-play" id="export-icon"></i>
+                    <span id="export-label">Start Collection</span>
+                </button>
+                <div id="export-status" class="hidden mt-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
+                            <div id="export-progress" class="h-full bg-red-500 rounded-full transition-all duration-500" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <p id="export-message" class="text-xs text-neutral-400 text-center"></p>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-info-circle text-red-500 mr-2"></i>Selected Methods</h3>
+                <div id="method-summary" class="space-y-1.5">
+                </div>
+                <div class="mt-3 pt-3 border-t border-neutral-800">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-neutral-500">LDAP methods</span>
+                        <span id="ldap-count" class="font-mono text-white">5</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs mt-1">
+                        <span class="text-neutral-500">SMB/RPC methods</span>
+                        <span id="smb-count" class="font-mono text-white">5</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLI equivalent -->
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <h3 class="text-sm font-semibold text-white mb-2"><i class="fas fa-terminal text-red-500 mr-2"></i>CLI Equivalent</h3>
+                <code id="cli-equivalent" class="block text-xs text-neutral-400 bg-neutral-950 rounded-md px-3 py-2 font-mono break-all select-all"></code>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var LDAP_METHODS = ['group', 'objectprops', 'acl', 'trusts', 'container'];
+var SMB_METHODS = ['session', 'localadmin', 'rdp', 'dcom', 'psremote', 'loggedon'];
+var ALL_METHODS = ['group', 'localadmin', 'session', 'trusts', 'objectprops', 'acl', 'dcom', 'rdp', 'psremote', 'container'];
+var DCONLY_METHODS = ['group', 'trusts', 'objectprops', 'acl', 'container'];
+var _exporting = false;
+
+function getCheckedMethods() {
+    return Array.from(document.querySelectorAll('input[name="method"]:checked')).map(function(cb) { return cb.value; });
+}
+
+function setCheckboxes(methods) {
+    document.querySelectorAll('input[name="method"]').forEach(function(cb) {
+        cb.checked = methods.indexOf(cb.value) !== -1;
+    });
+    updateSummary();
+}
+
+function setPreset(preset) {
+    document.querySelectorAll('.preset-btn').forEach(function(btn) {
+        btn.classList.remove('active', 'border-red-500/50', 'bg-red-500/10');
+        btn.classList.add('border-neutral-700', 'bg-neutral-800/50');
+    });
+    var btn = document.getElementById('preset-' + preset);
+    btn.classList.add('active', 'border-red-500/50', 'bg-red-500/10');
+    btn.classList.remove('border-neutral-700', 'bg-neutral-800/50');
+
+    if (preset === 'all') setCheckboxes(ALL_METHODS);
+    else if (preset === 'dconly') setCheckboxes(DCONLY_METHODS);
+    // custom: don't change checkboxes
+    updateSummary();
+}
+
+function updateSummary() {
+    var methods = getCheckedMethods();
+    var ldap = methods.filter(function(m) { return LDAP_METHODS.indexOf(m) !== -1; });
+    var smb = methods.filter(function(m) { return SMB_METHODS.indexOf(m) !== -1; });
+
+    document.getElementById('ldap-count').textContent = ldap.length;
+    document.getElementById('smb-count').textContent = smb.length;
+
+    var summary = document.getElementById('method-summary');
+    if (methods.length === 0) {
+        summary.innerHTML = '<p class="text-xs text-neutral-500">No methods selected</p>';
+    } else {
+        summary.innerHTML = methods.map(function(m) {
+            var isSmb = SMB_METHODS.indexOf(m) !== -1;
+            var color = isSmb ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400';
+            return '<span class="inline-block px-2 py-0.5 rounded text-[11px] font-medium ' + color + ' mr-1 mb-1">' + m + '</span>';
+        }).join('');
+    }
+
+    // CLI equivalent
+    var cli = 'pwnAD get bloodhound';
+    var sorted = methods.slice().sort();
+    var allSorted = ALL_METHODS.slice().sort();
+    var dconlySorted = DCONLY_METHODS.slice().sort();
+
+    if (sorted.join(',') === allSorted.join(',')) {
+        cli += ' -c all';
+    } else if (sorted.join(',') === dconlySorted.join(',')) {
+        cli += ' -c dconly';
+    } else {
+        cli += ' -c ' + methods.join(',');
+    }
+    var prefix = document.getElementById('opt-prefix').value.trim();
+    if (prefix) cli += ' --prefix ' + prefix;
+    var ns = document.getElementById('opt-nameserver').value.trim();
+    if (ns) cli += ' -ns ' + ns;
+    var workers = document.getElementById('opt-workers').value;
+    if (workers && workers !== '10') cli += ' -w ' + workers;
+    if (document.getElementById('opt-exclude-dcs').checked) cli += ' --exclude-dcs';
+    document.getElementById('cli-equivalent').textContent = cli;
+}
+
+function startExport() {
+    if (_exporting) return;
+    var methods = getCheckedMethods();
+    if (methods.length === 0) {
+        showToast('Select at least one collection method', 'warning');
+        return;
+    }
+    _exporting = true;
+
+    var btn = document.getElementById('export-btn');
+    var icon = document.getElementById('export-icon');
+    var label = document.getElementById('export-label');
+    var status = document.getElementById('export-status');
+    var progress = document.getElementById('export-progress');
+    var message = document.getElementById('export-message');
+
+    btn.disabled = true;
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
+    icon.className = 'fas fa-spinner fa-spin';
+    label.textContent = 'Collecting...';
+    status.classList.remove('hidden');
+    progress.style.width = '15%';
+    message.textContent = 'Connecting to domain controller...';
+
+    var formData = new FormData();
+    formData.append('methods', methods.join(','));
+    formData.append('workers', document.getElementById('opt-workers').value || '10');
+    formData.append('prefix', document.getElementById('opt-prefix').value.trim());
+    formData.append('nameserver', document.getElementById('opt-nameserver').value.trim());
+    formData.append('exclude_dcs', document.getElementById('opt-exclude-dcs').checked ? '1' : '');
+
+    var progressSteps = [
+        {t: 2000, w: '30%', m: 'Enumerating objects via LDAP...'},
+        {t: 5000, w: '50%', m: 'Collecting ACLs and properties...'},
+        {t: 10000, w: '70%', m: 'Resolving group memberships...'},
+        {t: 15000, w: '85%', m: 'Finishing collection...'},
+    ];
+    var timers = progressSteps.map(function(step) {
+        return setTimeout(function() {
+            if (_exporting) {
+                progress.style.width = step.w;
+                message.textContent = step.m;
+            }
+        }, step.t);
+    });
+
+    fetch('/api/export/bloodhound', {method: 'POST', body: formData})
+        .then(function(resp) {
+            if (!resp.ok) {
+                return resp.json().then(function(data) { throw new Error(data.message || 'Export failed'); });
+            }
+            var cd = resp.headers.get('content-disposition') || '';
+            var m = cd.match(/filename=(.+)/);
+            var fname = m ? m[1] : 'bloodhound.zip';
+            return resp.blob().then(function(blob) { return {blob: blob, fname: fname}; });
+        })
+        .then(function(r) {
+            progress.style.width = '100%';
+            message.textContent = 'Download ready!';
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(r.blob);
+            a.download = r.fname;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast('BloodHound CE export downloaded: ' + r.fname, 'success');
+        })
+        .catch(function(err) {
+            showToast('Export failed: ' + err.message, 'error');
+            message.textContent = 'Failed: ' + err.message;
+            progress.style.width = '0%';
+        })
+        .finally(function() {
+            timers.forEach(clearTimeout);
+            _exporting = false;
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            icon.className = 'fas fa-play';
+            label.textContent = 'Start Collection';
+        });
+}
+
+// Sync checkboxes → summary on change
+document.querySelectorAll('input[name="method"]').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        // Switch to custom preset when manually toggling
+        var active = document.querySelector('.preset-btn.active');
+        if (active && active.id !== 'preset-custom') {
+            setPreset('custom');
+        }
+        updateSummary();
+    });
+});
+document.getElementById('opt-nameserver').addEventListener('input', updateSummary);
+document.getElementById('opt-prefix').addEventListener('input', updateSummary);
+document.getElementById('opt-workers').addEventListener('input', updateSummary);
+document.getElementById('opt-exclude-dcs').addEventListener('change', updateSummary);
+
+// Init
+updateSummary();
+</script>
+{% endblock %}

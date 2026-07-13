@@ -452,3 +452,28 @@ def attribute(conn, target: str, attr: str, values: list, raw: bool = False, b64
         check_error(conn, error_code, e)
     except Exception as e:
         logging.error(f"Error modifying object: {e}")
+
+
+def unlock(conn, target: str):
+    """Unlock a locked-out Active Directory account by resetting lockoutTime to 0.
+
+    Args:
+        conn: LDAP connection object
+        target: sAMAccountName of the account to unlock
+    """
+    target_dn = conn.get_dn_from_samaccountname(target, "person")
+    if not target_dn:
+        logging.error(f"Account {target} not found")
+        return
+
+    try:
+        conn._ldap_connection.modify(target_dn, {
+            'lockoutTime': [(ldap3.MODIFY_REPLACE, ['0'])]
+        })
+        if conn._ldap_connection.result['result'] == 0:
+            logging.info(f"Account {target} unlocked successfully")
+        else:
+            logging.error(f"Failed to unlock {target}: {conn._ldap_connection.result['description']}")
+    except ldap3.core.exceptions.LDAPException as e:
+        error_code = conn._ldap_connection.result['result']
+        check_error(conn, error_code, e)

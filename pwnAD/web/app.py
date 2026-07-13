@@ -11,17 +11,14 @@ def start_web(connection, host='127.0.0.1', port=5000):
 
     try:
         from waitress import serve
-        # Serve with waitress - this call blocks until server shutdown.
-        # threads=1: all requests share a single ldap3 Connection whose default
-        # SYNC strategy is not thread-safe. Serialising requests avoids
-        # interleaved sends/reads on the same socket corrupting responses.
+        logging.getLogger('waitress.queue').setLevel(logging.ERROR)
         serve(
             app,
             host=host,
             port=port,
             threads=1,
             channel_timeout=300,
-            _quiet=False  # Enable request logging
+            _quiet=False,
         )
     except ImportError:
         logging.warning("[!] Waitress not installed, falling back to Flask development server")

@@ -12,6 +12,13 @@ def create_app(ldap_connection):
     app = Flask(__name__)
     app.config['LDAP_CONNECTION'] = ldap_connection
 
+    @app.template_filter('urlencode_page')
+    def urlencode_page(args, page):
+        from urllib.parse import urlencode
+        d = dict(args)
+        d['page'] = page
+        return urlencode(d, doseq=True)
+
     @app.before_request
     def check_ldap_connection():
         """Check LDAP connection health before each request and rebind if needed."""
@@ -40,5 +47,8 @@ def create_app(ldap_connection):
 
     from pwnAD.web.routes.adcs import adcs_bp
     app.register_blueprint(adcs_bp)
+
+    from pwnAD.web.routes.analysis import analysis_bp
+    app.register_blueprint(analysis_bp)
 
     return app

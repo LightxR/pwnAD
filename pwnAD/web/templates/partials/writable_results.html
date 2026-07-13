@@ -6,18 +6,28 @@
             <th class="px-4 py-3 font-medium w-24">OWNER</th>
             <th class="px-4 py-3 font-medium w-24">DACL</th>
             <th class="px-4 py-3 font-medium w-24">SACL</th>
+            <th class="px-4 py-3 font-medium w-24"></th>
         </tr>
     </thead>
     <tbody id="writable-body" class="divide-y divide-neutral-800/50">
         {% for r in results %}
         <tr class="hover:bg-white/[0.02]">
-            <td class="px-4 py-2.5 text-xs text-white font-mono">
-                <a href="/object?dn={{ r.dn|urlencode }}" class="hover:text-red-400">{{ r.dn }}</a>
+            <td class="px-4 py-2.5 text-xs font-mono">
+                {% if 'CN=Users' in r.dn or 'OU=' in r.dn and 'objectClass' not in r.dn %}
+                <i class="fas fa-user text-blue-400 mr-1.5"></i>
+                {% elif 'CN=Computers' in r.dn %}
+                <i class="fas fa-desktop text-purple-400 mr-1.5"></i>
+                {% elif 'CN=Groups' in r.dn or 'group' in (r.dn|lower) %}
+                <i class="fas fa-users text-green-400 mr-1.5"></i>
+                {% else %}
+                <i class="fas fa-cube text-neutral-500 mr-1.5"></i>
+                {% endif %}
+                <a href="/object?dn={{ r.dn|urlencode }}" class="text-white hover:text-red-400 transition">{{ r.dn }}</a>
             </td>
             <td class="px-4 py-2.5 text-xs">
                 {% if r.permissions %}
                     {% for perm in r.permissions %}
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {% if perm == 'WRITE' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">{{ perm }}</span>
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {% if perm in ['GENERIC_ALL', 'WRITE_DAC', 'WRITE_OWNER'] %}bg-red-500/20 text-red-400{% elif perm == 'WRITE' %}bg-orange-500/20 text-orange-400{% elif perm == 'CHILD' %}bg-yellow-500/20 text-yellow-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">{{ perm }}</span>
                     {% endfor %}
                 {% else %}
                     <span class="text-neutral-500">-</span>
@@ -44,10 +54,15 @@
                     <span class="text-neutral-500">-</span>
                 {% endif %}
             </td>
+            <td class="px-4 py-2.5 text-xs">
+                <a href="/dacl?dn={{ r.dn|urlencode }}" class="inline-flex items-center gap-1 px-2 py-1 rounded bg-neutral-800 text-neutral-400 hover:bg-red-500/20 hover:text-red-400 transition" title="View DACL">
+                    <i class="fas fa-lock text-[10px]"></i> DACL
+                </a>
+            </td>
         </tr>
         {% endfor %}
         {% if results|length == 0 %}
-        <tr><td colspan="5" class="px-4 py-8 text-center text-neutral-500">No writable objects found</td></tr>
+        <tr><td colspan="6" class="px-4 py-8 text-center text-neutral-500">No writable objects found</td></tr>
         {% endif %}
     </tbody>
 </table>

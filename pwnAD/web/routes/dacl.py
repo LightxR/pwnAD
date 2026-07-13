@@ -6,7 +6,7 @@ from binascii import hexlify, unhexlify
 from io import BytesIO
 
 import ldap3
-from flask import Blueprint, request, render_template, current_app, jsonify, send_file
+from flask import Blueprint, request, render_template, jsonify, send_file
 from impacket.ldap import ldaptypes
 from ldap3 import MODIFY_REPLACE
 from ldap3.protocol.microsoft import security_descriptor_control
@@ -19,22 +19,9 @@ from pwnAD.lib.accesscontrol import (
     create_ace, parse_ace, guid_to_string, resolve_sid_to_name,
 )
 from pwnAD.lib.utils import resolve_target
+from pwnAD.web.context import get_conn, base_context
 
 dacl_bp = Blueprint('dacl', __name__)
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
-
-
-def _base_context(active_page='dacl'):
-    conn = _get_conn()
-    return {
-        'domain': conn.domain,
-        'dc_ip': conn.target,
-        'session_user': getattr(conn, 'ldap_user', '') or getattr(conn, 'user', ''),
-        'active_page': active_page,
-    }
 
 
 def _get_security_descriptor(conn, target_dn):
@@ -97,12 +84,12 @@ def _parse_aces(conn, sd, principal_filter=None):
 @dacl_bp.route('/dacl')
 def dacl_view():
     dn = request.args.get('dn', '').strip()
-    ctx = _base_context('dacl')
+    ctx = base_context('dacl')
     ctx['target_dn'] = dn
     ctx['dacl_rights'] = DACL_RIGHTS
 
     if dn:
-        conn = _get_conn()
+        conn = get_conn()
         resolved_dn = resolve_target(conn, dn)
         if not resolved_dn:
             ctx['aces'] = []
@@ -139,7 +126,7 @@ def dacl_view():
 
 @dacl_bp.route('/dacl/aces')
 def dacl_aces():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.args.get('dn', '').strip()
     principal = request.args.get('principal', '').strip()
 
@@ -168,7 +155,7 @@ def dacl_aces():
 
 @dacl_bp.route('/dacl/write', methods=['POST'])
 def dacl_write():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     principal = request.form.get('principal', '').strip()
     right = request.form.get('right', '').strip()
@@ -212,7 +199,7 @@ def dacl_write():
 
 @dacl_bp.route('/dacl/remove', methods=['POST'])
 def dacl_remove():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.form.get('dn', '').strip()
     ace_index = request.form.get('ace_index', '').strip()
 
@@ -244,7 +231,7 @@ def dacl_remove():
 
 @dacl_bp.route('/dacl/backup')
 def dacl_backup():
-    conn = _get_conn()
+    conn = get_conn()
     dn = request.args.get('dn', '').strip()
 
     if not dn:
@@ -275,7 +262,7 @@ def dacl_backup():
 
 @dacl_bp.route('/dacl/restore', methods=['POST'])
 def dacl_restore():
-    conn = _get_conn()
+    conn = get_conn()
 
     if 'file' not in request.files:
         return jsonify(success=False, message='No file uploaded'), 400

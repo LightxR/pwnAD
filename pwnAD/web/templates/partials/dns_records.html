@@ -1,6 +1,8 @@
 {% for rec in records %}
 <tr class="hover:bg-white/[0.02] transition border-t border-neutral-800/50">
-    <td class="px-4 py-2.5 text-sm text-white font-medium">{{ rec.name }}</td>
+    <td class="px-4 py-2.5 text-sm font-medium">
+        <a href="/queries?search={{ rec.name|urlencode }}" class="text-white hover:text-red-400 transition">{{ rec.name }}</a>
+    </td>
     <td class="px-4 py-2.5">
         <span class="inline-block text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">{{ rec.type }}</span>
     </td>

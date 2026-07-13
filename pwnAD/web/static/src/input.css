@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+    .sidebar-link {
+        @apply flex items-center gap-3 px-3 py-2 text-sm rounded-md font-medium text-neutral-400 hover:bg-white/5 hover:text-white transition;
+    }
+    .sidebar-link.active {
+        @apply bg-white/10 text-white;
+    }
+    .sidebar-link i {
+        @apply w-5 text-center opacity-70;
+    }
+    .sidebar-link:hover i {
+        @apply opacity-100;
+    }
+}

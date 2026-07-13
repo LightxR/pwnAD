@@ -5,36 +5,23 @@ Provides web interface for CA enumeration and ESC vulnerability detection.
 
 import logging
 
-from flask import Blueprint, render_template, request, current_app, jsonify
+from flask import Blueprint, render_template, request, jsonify
 
 from pwnAD.lib.adcs import (
     get_certificate_templates, get_enrollment_services, analyze_adcs,
     get_oid_to_group_links, ESC_DEFINITIONS
 )
 
+from pwnAD.web.context import get_conn, base_context
+
 adcs_bp = Blueprint('adcs', __name__)
-
-
-def _get_conn():
-    return current_app.config['LDAP_CONNECTION']
-
-
-def _base_context(active_page='adcs'):
-    """Common template context."""
-    conn = _get_conn()
-    return {
-        'domain': conn.domain,
-        'dc_ip': conn.target,
-        'session_user': getattr(conn, 'ldap_user', '') or getattr(conn, 'user', ''),
-        'active_page': active_page,
-    }
 
 
 @adcs_bp.route('/adcs')
 def adcs_view():
     """Main ADCS view with CAs and templates."""
-    conn = _get_conn()
-    ctx = _base_context('adcs')
+    conn = get_conn()
+    ctx = base_context('adcs')
 
     # Query parameters
     selected_ca = request.args.get('ca', '').strip()
@@ -97,8 +84,8 @@ def adcs_view():
 @adcs_bp.route('/adcs/template/<name>')
 def template_detail(name):
     """Get detailed information about a certificate template."""
-    conn = _get_conn()
-    ctx = _base_context('adcs')
+    conn = get_conn()
+    ctx = base_context('adcs')
 
     ctx['template'] = None
     ctx['error'] = None
@@ -137,7 +124,7 @@ def template_detail(name):
 @adcs_bp.route('/api/adcs/summary')
 def api_adcs_summary():
     """API endpoint returning ADCS summary statistics."""
-    conn = _get_conn()
+    conn = get_conn()
 
     try:
         result = analyze_adcs(conn, vulnerable_only=False)
@@ -171,7 +158,7 @@ def api_adcs_summary():
 @adcs_bp.route('/api/adcs/templates')
 def api_adcs_templates():
     """API endpoint returning all templates with vulnerability info."""
-    conn = _get_conn()
+    conn = get_conn()
     vulnerable_only = request.args.get('vulnerable', '').lower() == 'true'
     ca_filter = request.args.get('ca', '').strip()
 
@@ -204,7 +191,7 @@ def api_adcs_templates():
 @adcs_bp.route('/api/adcs/cas')
 def api_adcs_cas():
     """API endpoint returning all Certificate Authorities."""
-    conn = _get_conn()
+    conn = get_conn()
 
     try:
         cas = get_enrollment_services(conn)
@@ -217,3 +204,51 @@ def api_adcs_cas():
     except Exception as e:
         logging.error(f"API error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@adcs_bp.route('/api/adcs/request', methods=['POST'])
+def api_adcs_request():
+    """Request a certificate from ADCS via MS-ICPR RPC."""
+    import os
+    import base64
+    import tempfile
+    conn = get_conn()
+    ca_name = request.form.get('ca_name', '').strip()
+    template = request.form.get('template', '').strip()
+    upn = request.form.get('upn', '').strip() or None
+    dns = request.form.get('dns', '').strip() or None
+    sid = request.form.get('sid', '').strip() or None
+    subject = request.form.get('subject', '').strip() or None
+
+    if not ca_name or not template:
+        return jsonify(success=False, message='CA name and template are required'), 400
+
+    try:
+        from pwnAD.lib.certreq import request_certificate
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, 'cert.pfx')
+            pfx_path, cert, key = request_certificate(
+                conn, ca_name=ca_name, template=template,
+                upn=upn, dns=dns, sid=sid, subject=subject,
+                output=output,
+            )
+            with open(pfx_path, 'rb') as f:
+                pfx_b64 = base64.b64encode(f.read()).decode()
+
+            cert_info = {
+                'subject': cert.subject.rfc4514_string(),
+                'issuer': cert.issuer.rfc4514_string(),
+                'serial': format(cert.serial_number, 'x'),
+                'not_before': str(cert.not_valid_before_utc),
+                'not_after': str(cert.not_valid_after_utc),
+            }
+
+            return jsonify(
+                success=True,
+                message=f'Certificate issued for template {template}',
+                pfx_b64=pfx_b64,
+                cert_info=cert_info,
+            )
+    except Exception as e:
+        logging.error(f"ADCS request error: {e}")
+        return jsonify(success=False, message=str(e)), 500

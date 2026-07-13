@@ -19,6 +19,7 @@ setup(
         "ldap3==2.10.2rc3",
         "pyasn1==0.4.8",
         "dsinternals",
+        "bloodhound-ce",
         "flask",
         "waitress",
     ],
@@ -30,7 +31,14 @@ setup(
         "pwnAD.web.routes",
     ],
     package_data={
-        "pwnAD.web": ["templates/*.html", "templates/partials/*.html", "static/*"],
+        "pwnAD.web": [
+            "templates/*.html",
+            "templates/partials/*.html",
+            "static/vendor/*.css",
+            "static/vendor/*.js",
+            "static/vendor/webfonts/*",
+            "static/src/*.css",
+        ],
     },
     entry_points={
         "console_scripts": ["pwnAD=pwnAD.main:main"],

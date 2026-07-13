@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}pwnAD - DACL Editor{% endblock %}
+{% block breadcrumbs %}
+<nav class="px-6 pt-4 pb-0 flex items-center gap-2 text-xs text-neutral-500">
+    <a href="/" class="hover:text-white transition">Dashboard</a>
+    <i class="fas fa-chevron-right text-[8px]"></i>
+    <span class="text-neutral-300">DACL Editor</span>
+</nav>
+{% endblock %}
 {% block content %}
 <div class="p-6 h-full flex flex-col gap-4">
     <!-- Search Panel -->
@@ -75,6 +82,7 @@
             <table class="min-w-full text-left text-sm" id="aces-table">
                 <thead class="sticky top-0 bg-neutral-900 border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider z-10">
                     <tr>
+                        <th class="w-1 p-0"></th>
                         <th class="px-4 py-3 font-medium w-24">Type</th>
                         <th class="px-4 py-3 font-medium">Trustee</th>
                         <th class="px-4 py-3 font-medium">Rights</th>
