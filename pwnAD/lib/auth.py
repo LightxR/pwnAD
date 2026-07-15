@@ -110,6 +110,29 @@ class Authenticate:
         connection.connect()
         return connection
         
+    def _extract_username_from_cert(self, cert):
+        """Extract username from certificate SAN UPN or subject CN."""
+        # Try SAN UPN first (most reliable for user certs)
+        try:
+            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+            for name in san.value:
+                if isinstance(name, x509.OtherName) and name.type_id.dotted_string == '1.3.6.1.4.1.311.20.2.3':
+                    upn = name.value[2:].decode(errors='replace')
+                    return upn.split('@')[0]
+        except (x509.ExtensionNotFound, Exception):
+            pass
+        # Fall back to subject CN
+        try:
+            for attr in cert.subject:
+                if attr.oid == x509.oid.NameOID.COMMON_NAME:
+                    cn = attr.value
+                    if '.' in cn:
+                        return cn.split('.')[0] + '$'
+                    return cn
+        except Exception:
+            pass
+        return None
+
     def kerberos_authentication(self) -> None:
 
         if self.cert is not None and self.key is not None:
@@ -121,4 +144,12 @@ class Authenticate:
                 self.key= pem_to_key(self.key)
         elif self.pfx is not None:
             with open(self.pfx, "rb") as f:
-                self.key, self.cert = load_pfx(f.read())      
+                self.key, self.cert = load_pfx(f.read())
+
+        if self.cert is not None and self.username is None:
+            extracted = self._extract_username_from_cert(self.cert)
+            if extracted:
+                self.username = extracted
+                logging.info(f'[*] Username extracted from certificate: {self.username}')
+            else:
+                raise ValueError('No username provided and could not extract from certificate. Use -u to specify.')      

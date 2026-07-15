@@ -35,15 +35,27 @@
 <!-- Vulnerability Alert -->
 {% if template.vulnerabilities %}
 <div class="mb-6 p-4 rounded-lg {% if template.highest_severity == 'Critical' %}bg-red-500/10 border border-red-500/50{% else %}bg-orange-500/10 border border-orange-500/50{% endif %}">
-    <h3 class="font-semibold {% if template.highest_severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %} mb-2">
+    <h3 class="font-semibold {% if template.highest_severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %} mb-3">
         <i class="fas fa-shield-virus mr-2"></i>
         {{ template.vulnerabilities|length }} Vulnerabilit{% if template.vulnerabilities|length > 1 %}ies{% else %}y{% endif %} Detected
     </h3>
-    <ul class="space-y-2">
+    <ul class="space-y-3">
         {% for vuln in template.vulnerabilities %}
         <li class="text-sm">
-            <span class="font-mono font-bold {% if vuln.severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %}">{{ vuln.id }}</span>
-            <span class="text-neutral-300"> - {{ vuln.description }}</span>
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="font-mono font-bold {% if vuln.severity == 'Critical' %}text-red-400{% else %}text-orange-400{% endif %}">{{ vuln.id }}</span>
+                    <span class="text-neutral-300"> - {{ vuln.description }}</span>
+                </div>
+                {% set exploitable = vuln.id in ['ESC1', 'ESC2', 'ESC4', 'ESC9', 'ESC13', 'ESC15'] %}
+                {% if exploitable %}
+                <button onclick="openExploitModal('{{ vuln.id }}', '{{ template.name }}', '{{ template_cas[0] if template_cas else '' }}')"
+                        class="shrink-0 ml-3 px-2.5 py-1 rounded text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition"
+                        title="Exploit {{ vuln.id }}">
+                    <i class="fas fa-bolt mr-1"></i>Exploit
+                </button>
+                {% endif %}
+            </div>
             {% if vuln.detail %}
             <div class="text-xs text-neutral-500 mt-1 ml-4">{{ vuln.detail }}</div>
             {% endif %}

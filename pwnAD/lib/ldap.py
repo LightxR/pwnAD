@@ -113,6 +113,88 @@ class LDAPConnection(LDAPHelpersMixin):
         if self.port is None:
             self.port = LDAPS_PORT if self._do_tls else LDAP_PORT
 
+    @classmethod
+    def from_relay(cls, ldap3_connection, target, domain=None):
+        """Create an LDAPConnection from a pre-authenticated ldap3.Connection (NTLM relay).
+
+        The relayed connection is already bound so we skip all authentication.
+        Credential fields remain empty -- RPC operations must use a separate
+        relay path.
+        """
+        obj = object.__new__(cls)
+        obj._ldap_connection = ldap3_connection
+        obj._ldap_server = ldap3_connection.server
+        obj.target = target
+        obj.domain = domain
+        obj._baseDN = ''
+        obj.configuration_path = ''
+        obj.ldap_user = ''
+        obj.ldap_pass = ''
+        obj.lmhash = ''
+        obj.nthash = ''
+        obj.aesKey = None
+        obj.pfx = None
+        obj.pfx_pass = None
+        obj.key = None
+        obj.cert = None
+        obj.use_kerberos = False
+        obj.kdcHost = None
+        obj._do_tls = ldap3_connection.server.ssl
+        obj.port = ldap3_connection.server.port
+        obj._sign_and_seal_supported = False
+        obj._tls_channel_binding_supported = False
+        obj._do_certificate = False
+        obj._is_relayed = True
+
+        # Derive identity from the connection
+        if ldap3_connection.user:
+            obj.user = ldap3_connection.user
+            parts = ldap3_connection.user.replace('/', '\\').split('\\')
+            if len(parts) == 2:
+                if not obj.domain:
+                    obj.domain = parts[0]
+                obj.ldap_user = parts[1]
+            else:
+                obj.ldap_user = ldap3_connection.user
+        else:
+            obj.user = 'RELAY'
+            obj.ldap_user = 'RELAY'
+
+        # Bootstrap baseDN from the relayed connection itself
+        try:
+            ldap3_connection.search(
+                search_base='',
+                search_filter='(objectClass=*)',
+                search_scope=ldap3.BASE,
+                attributes=['*'],
+            )
+            if ldap3_connection.entries:
+                entry = ldap3_connection.entries[0]
+                attrs = entry.entry_attributes_as_dict
+                obj._baseDN = attrs.get('defaultNamingContext', [''])[0]
+                obj.configuration_path = attrs.get('configurationNamingContext', [''])[0]
+        except Exception:
+            pass
+
+        # Fallback: try server info if RootDSE search didn't populate
+        if not obj._baseDN:
+            try:
+                info = ldap3_connection.server.info
+                if info and hasattr(info, 'other') and info.other:
+                    obj._baseDN = info.other.get('defaultNamingContext', [''])[0]
+                    obj.configuration_path = info.other.get('configurationNamingContext', [''])[0]
+            except Exception:
+                pass
+
+        if not obj._baseDN and obj.domain:
+            obj._baseDN = ','.join(f'DC={p}' for p in obj.domain.split('.'))
+            obj.configuration_path = f'CN=Configuration,{obj._baseDN}'
+        if not obj.domain and obj._baseDN:
+            obj.domain = obj._baseDN.replace('DC=', '').replace(',', '.')
+
+        logging.info(f'[*] Relay session: {obj.user} on {obj.domain}')
+        return obj
+
     # ------------------------------------------------------------------
     # Authentication methods
     # ------------------------------------------------------------------
@@ -537,6 +619,9 @@ class LDAPConnection(LDAPHelpersMixin):
         Returns:
             bool: True if rebind succeeded, False otherwise.
         """
+        if getattr(self, '_is_relayed', False):
+            return self.is_connected()
+
         try:
             can_simple_rebind = (
                 not self.use_kerberos

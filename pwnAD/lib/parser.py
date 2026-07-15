@@ -81,6 +81,18 @@ def authentication_args(parser):
     web.add_argument("--web-host", dest="web_host", metavar="HOST", default="127.0.0.1", help="Web server bind address (default: 127.0.0.1)")
     web.add_argument("--web-port", dest="web_port", metavar="PORT", type=int, default=5000, help="Web server port (default: 5000)")
 
+    relay = parser.add_argument_group("NTLM Relay")
+    relay.add_argument("--relay", dest="relay", action="store_true", default=False, help="Start NTLM relay mode (SMB/HTTP listener)")
+    relay.add_argument("-t", "--target", dest="relay_target", metavar="TARGET", help="Relay target (e.g. ldaps://dc01, http://ca/certsrv, rpc://ca)")
+    relay.add_argument("--relay-host", dest="relay_host", metavar="HOST", default="0.0.0.0", help="Relay listener bind address (default: 0.0.0.0)")
+    relay.add_argument("--smb-port", dest="smb_port", metavar="PORT", type=int, default=445, help="SMB listener port (default: 445)")
+    relay.add_argument("--http-port", dest="http_port", metavar="PORT", type=int, default=80, help="HTTP listener port (default: 80)")
+    relay.add_argument("--no-smb", dest="relay_no_smb", action="store_true", default=False, help="Disable SMB relay listener")
+    relay.add_argument("--no-http", dest="relay_no_http", action="store_true", default=False, help="Disable HTTP relay listener")
+    relay.add_argument("--relay-template", dest="relay_template", metavar="TEMPLATE", help="Certificate template for ESC8/ESC11 auto-exploit")
+    relay.add_argument("--relay-ca", dest="relay_ca", metavar="CA", help="CA name for ESC8/ESC11 auto-exploit")
+    relay.add_argument("--relay-alt-name", dest="relay_alt_name", metavar="UPN", help="Alternative UPN for ESC8/ESC11 (impersonate)")
+
 
 def get_parser(interactive=False):
     all_subparsers = []
@@ -318,7 +330,7 @@ Functions:
     laps, gmsa
 
   ADCS (Certificate Services):
-    adcs, adcs_req
+    adcs, adcs_req, esc4, esc7, esc9
 
   Domain Trusts / Network:
     trusts, gpos, foreign_members
@@ -463,7 +475,7 @@ Functions:
     get_adcs_parser.add_argument("--no-ca-config", dest="ca_config", action="store_false", default=True, help="Don't try to get CA config via RRP")
     all_subparsers.append(get_adcs_parser)
 
-    get_adcs_req_parser = get_subparsers.add_parser('adcs_req', help="Request a certificate from ADCS (ESC1 exploitation)")
+    get_adcs_req_parser = get_subparsers.add_parser('adcs_req', help="Request a certificate from ADCS (ESC1/ESC6 exploitation)")
     get_adcs_req_parser.add_argument("-ca", "--ca-name", dest="ca_name", required=True, help="CA name (e.g. CORP-CA)")
     get_adcs_req_parser.add_argument("-template", "--template", dest="template", required=True, help="Certificate template name")
     get_adcs_req_parser.add_argument("-upn", "--upn", dest="upn", default=None, help="UPN for SAN (e.g. administrator@domain.local)")
@@ -474,6 +486,35 @@ Functions:
     get_adcs_req_parser.add_argument("-key-size", "--key-size", dest="key_size", type=int, default=2048, help="RSA key size (default: 2048)")
     get_adcs_req_parser.add_argument("-o", "--output", dest="output", default=None, help="Output PFX file path")
     all_subparsers.append(get_adcs_req_parser)
+
+    get_esc4_parser = get_subparsers.add_parser('esc4', help="ESC4: modify writable template → request cert → restore")
+    get_esc4_parser.add_argument("-ca", "--ca-name", dest="ca_name", required=True, help="CA name")
+    get_esc4_parser.add_argument("-template", "--template", dest="template", required=True, help="Writable template name")
+    get_esc4_parser.add_argument("-upn", "--upn", dest="upn", required=True, help="UPN to impersonate (e.g. administrator@domain.local)")
+    get_esc4_parser.add_argument("-ca-host", "--ca-host", dest="ca_host", default=None, help="CA hostname")
+    get_esc4_parser.add_argument("-key-size", "--key-size", dest="key_size", type=int, default=2048, help="RSA key size")
+    get_esc4_parser.add_argument("-o", "--output", dest="output", default=None, help="Output PFX file path")
+    all_subparsers.append(get_esc4_parser)
+
+    get_esc7_parser = get_subparsers.add_parser('esc7', help="ESC7: enable SAN via ManageCA → request cert → restore")
+    get_esc7_parser.add_argument("-ca", "--ca-name", dest="ca_name", required=True, help="CA name")
+    get_esc7_parser.add_argument("-template", "--template", dest="template", default=None, help="Template (auto-detected if omitted)")
+    get_esc7_parser.add_argument("-upn", "--upn", dest="upn", required=True, help="UPN to impersonate")
+    get_esc7_parser.add_argument("-ca-host", "--ca-host", dest="ca_host", default=None, help="CA hostname")
+    get_esc7_parser.add_argument("-key-size", "--key-size", dest="key_size", type=int, default=2048, help="RSA key size")
+    get_esc7_parser.add_argument("-o", "--output", dest="output", default=None, help="Output PFX file path")
+    get_esc7_parser.add_argument("--no-restore", dest="restore", action="store_false", default=True, help="Don't restore EditFlags after exploitation")
+    all_subparsers.append(get_esc7_parser)
+
+    get_esc9_parser = get_subparsers.add_parser('esc9', help="ESC9/ESC10: swap UPN on target → request cert → restore")
+    get_esc9_parser.add_argument("-target", "--target", dest="target_sam", required=True, help="sAMAccountName of account you can write to")
+    get_esc9_parser.add_argument("-ca", "--ca-name", dest="ca_name", required=True, help="CA name")
+    get_esc9_parser.add_argument("-template", "--template", dest="template", required=True, help="Template with NO_SECURITY_EXTENSION (ESC9) or any template (ESC10)")
+    get_esc9_parser.add_argument("-upn", "--upn", dest="upn", required=True, help="UPN to impersonate")
+    get_esc9_parser.add_argument("-ca-host", "--ca-host", dest="ca_host", default=None, help="CA hostname")
+    get_esc9_parser.add_argument("-key-size", "--key-size", dest="key_size", type=int, default=2048, help="RSA key size")
+    get_esc9_parser.add_argument("-o", "--output", dest="output", default=None, help="Output PFX file path")
+    all_subparsers.append(get_esc9_parser)
 
     get_deleted_parser = get_subparsers.add_parser('deleted', help="List deleted objects from AD Recycle Bin")
     get_deleted_parser.add_argument("target", nargs="?", action="store", default=None, help="Optional target to search for (sAMAccountName, SID, or name pattern)")
@@ -762,6 +803,22 @@ Functions:
     return parser, all_subparsers, action_parsers
 
 def parseArgs():
+    # Relay mode doesn't use subcommands — detect early and parse without them
+    if '--relay' in sys.argv:
+        relay_parser = PwnADArgumentParser(
+            prog='pwnAD',
+            description='pwnAD NTLM Relay mode',
+            formatter_class=PwnADHelpFormatter,
+        )
+        authentication_args(relay_parser)
+        if len(sys.argv) == 1:
+            relay_parser.print_help()
+            sys.exit(1)
+        args = relay_parser.parse_args()
+        args.action = None
+        args.function = None
+        return args, {}
+
     parser, all_subparsers, action_parsers = get_parser()
 
     # Authentication args only on main parser (allows: pwnAD [auth] [action] [function])

